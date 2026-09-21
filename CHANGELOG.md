@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/compare/v1.0.0...v1.0.1) (2026-09-21)
+
+### Bug Fixes
+
+- match repository.url to provenance repo URL exactly ([7721069](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/77210699eb23c5e7ba48457e0ec5ffbe062059ab))
+
 ## 1.0.0 (2026-09-21)
 
 ### Features
