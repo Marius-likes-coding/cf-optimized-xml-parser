@@ -35,10 +35,10 @@ function attrsHeavy(elements, attrsPerElement) {
   return out + `</root>`;
 }
 
-function deepNesting(depth, breadth) {
-  let inner = "leaf";
-  for (let d = 0; d < depth; d++)
-    inner = `<level${d} id="${d}">${inner.repeat(breadth).slice(0, 4000)}</level${d}>`;
+function deepNesting(levels, padLen) {
+  const pad = "padding-text ".repeat(Math.ceil(padLen / 13)).slice(0, padLen);
+  let inner = `leaf-${pad}`;
+  for (let d = 0; d < levels; d++) inner = `<level${d} id="${d}">${pad}${inner}</level${d}>`;
   return `<?xml version="1.0"?><root>${inner}</root>`;
 }
 
@@ -53,7 +53,7 @@ const specs = [
   ["tiny-1k.xml", rssFeed(5, 60)],
   ["rss-100k.xml", rssFeed(300, 200)],
   ["attrs-heavy-100k.xml", attrsHeavy(1200, 8)],
-  ["deep-nesting-100k.xml", deepNesting(60, 2)],
+  ["deep-nesting-100k.xml", deepNesting(1200, 60)],
   ["cdata-heavy-100k.xml", cdataHeavy(300, 250)],
   ["large-1mb.xml", rssFeed(3000, 220)],
   ["large-5mb.xml", rssFeed(14_000, 250)],
@@ -65,11 +65,10 @@ for (const [name, content] of specs) {
   manifest[name] = { bytes: content.length, sha: sha256(content) };
 }
 
-// many/ burst corpus: 1000 x ~2KB files for throughput testing
+// many/ burst corpus: 200 x ~2KB files for throughput testing
 const manyDir = join(root, "many");
 mkdirSync(manyDir, { recursive: true });
 for (let i = 0; i < 200; i++) {
-  // 200 checked in; CI can scale with MANY_COUNT env if needed
   const content = rssFeed(8, 120).replaceAll("Bench", `Bench-${i}`);
   writeFileSync(join(manyDir, `doc-${String(i).padStart(4, "0")}.xml`), content);
 }

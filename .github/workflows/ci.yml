@@ -56,7 +56,7 @@ jobs:
           LATEST=$(ls -1 bench/history/*.json 2>/dev/null | sort | tail -n 1 || true)
           if [ -n "$LATEST" ]; then cp "$LATEST" bench/results/baseline.json; echo "baseline=$LATEST" >> "$GITHUB_STEP_SUMMARY"; else echo "No history yet — first run."; fi
       - name: Run bench
-        run: npx vitest bench --run --project workers --outputJson=bench/results/vitest-bench.json || npx vitest bench --run --outputJson=bench/results/vitest-bench.json
+        run: npx vitest bench --run --project workers --outputJson=bench/results/vitest-bench.json
       - run: node scripts/bench-save.mjs bench/results/vitest-bench.json bench/results/current.json
       - run: node scripts/bench-compare.mjs
         env:

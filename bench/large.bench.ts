@@ -15,34 +15,18 @@ const RSS_100K = load("rss-100k.xml");
 const LARGE_1MB = load("large-1mb.xml");
 const LARGE_5MB = load("large-5mb.xml");
 
-function safeParse(xml: string): void {
+/** Returns the parse result (or null until the parser lands) so callbacks stay one-liners. */
+function safeParse(xml: string): unknown {
   try {
-    parse(xml);
+    return parse(xml);
   } catch {
     // overhead baseline until parser lands
+    return null;
   }
 }
 
 describe("parse: large documents", () => {
-  bench(
-    "rss-100k (single)",
-    () => {
-      safeParse(RSS_100K);
-    },
-    { time: 800 },
-  );
-  bench(
-    "large-1mb (single)",
-    () => {
-      safeParse(LARGE_1MB);
-    },
-    { time: 800 },
-  );
-  bench(
-    "large-5mb (single)",
-    () => {
-      safeParse(LARGE_5MB);
-    },
-    { time: 1000 },
-  );
+  bench("rss-100k (single)", () => void safeParse(RSS_100K), { time: 800 });
+  bench("large-1mb (single)", () => void safeParse(LARGE_1MB), { time: 800 });
+  bench("large-5mb (single)", () => void safeParse(LARGE_5MB), { time: 1000 });
 });

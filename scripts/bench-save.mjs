@@ -35,25 +35,11 @@ for (const f of raw.files ?? []) {
         avgMs: b.mean ?? null,
         minMs: b.min ?? null,
         maxMs: b.max ?? null,
-        p50Ms: b.median ?? b.p50 ?? null,
+        p50Ms: b.median ?? null,
         p99Ms: b.p99 ?? null,
         samples: b.sampleCount ?? null,
       });
     }
-  }
-  // Fallback for alternate shapes (tasks / flat benchmarks)
-  for (const task of f.tasks ?? []) {
-    const r = task.result?.benchmark ?? task.result ?? {};
-    results.push({
-      name: `${f.name ?? f.filepath ?? ""} > ${task.name ?? "unknown"}`,
-      hz: r.hz ?? null,
-      avgMs: r.mean ?? null,
-      minMs: r.min ?? null,
-      maxMs: r.max ?? null,
-      p50Ms: r.median ?? r.p50 ?? null,
-      p99Ms: r.p99 ?? null,
-      samples: r.sampleCount ?? null,
-    });
   }
 }
 

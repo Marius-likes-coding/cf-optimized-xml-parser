@@ -3,8 +3,7 @@
  * Compare baseline vs current benchmark JSON.
  * - Reads bench/results/baseline.json + bench/results/current.json
  * - Prints markdown table (also to $GITHUB_STEP_SUMMARY when present)
- * - Exits 1 when any case regresses more than REGRESSION_THRESHOLD (default 10%)
- *   or improves suspiciously more than 50% (likely harness error → warn only).
+ * - Exits 1 when any case regresses more than REGRESSION_THRESHOLD (default 10%).
  *
  * Schema per file: { sha, timestamp, results: [{ name, hz, avgMs, ... }] }
  */

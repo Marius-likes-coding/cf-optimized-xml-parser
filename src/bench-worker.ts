@@ -26,7 +26,8 @@ function attrsHeavy(elements: number, attrsPerElement: number): string {
   let out = `<root>`;
   for (let index = 0; index < elements; index++) {
     let attributes = "";
-    for (let a = 0; a < attrsPerElement; a++) attributes += ` a${a}="value-${index}-${a}"`;
+    for (let attr = 0; attr < attrsPerElement; attr++)
+      attributes += ` a${attr}="value-${index}-${attr}"`;
     out += `<node${attributes}>text-${index}</node>`;
   }
   return out + `</root>`;
@@ -40,50 +41,39 @@ function cdataHeavy(sections: number, sectionLength: number): string {
   return out + `</root>`;
 }
 
-function buildFixture(name: string): string | undefined {
-  switch (name) {
-    case "tiny-1k": {
-      return rssFeed(5, 60);
-    }
-    case "rss-100k": {
-      return rssFeed(300, 200);
-    }
-    case "attrs-heavy-100k": {
-      return attrsHeavy(1200, 8);
-    }
-    case "deep-nesting-100k": {
-      return `<root>${"<level>".repeat(40)}leaf${"</level>".repeat(40)}</root>`;
-    }
-    case "cdata-heavy-100k": {
-      return cdataHeavy(300, 250);
-    }
-    case "large-1mb": {
-      return rssFeed(3000, 220);
-    }
-    default: {
-      return undefined;
-    }
-  }
-}
+const FIXTURES: Record<string, () => string> = {
+  "tiny-1k": () => rssFeed(5, 60),
+  "rss-100k": () => rssFeed(300, 200),
+  "attrs-heavy-100k": () => attrsHeavy(1200, 8),
+  "deep-nesting-100k": () => `<root>${"<level>".repeat(40)}leaf${"</level>".repeat(40)}</root>`,
+  "cdata-heavy-100k": () => cdataHeavy(300, 250),
+  "large-1mb": () => rssFeed(3000, 220),
+};
 
-const FIXTURE_NAMES = [
-  "tiny-1k",
-  "rss-100k",
-  "attrs-heavy-100k",
-  "deep-nesting-100k",
-  "cdata-heavy-100k",
-  "large-1mb",
-];
-
-function quantile(sorted: number[], q: number): number {
+function quantile(sorted: number[], probability: number): number {
   if (sorted.length === 0) return 0;
-  const index = Math.min(sorted.length - 1, Math.ceil(q * sorted.length) - 1);
+  const index = Math.min(sorted.length - 1, Math.ceil(probability * sorted.length) - 1);
   return sorted[index] ?? 0;
 }
 
 function mean(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+/** Time one parse; exceptions only measure harness overhead until the parser lands. */
+function timeParse(xml: string): number {
+  const start = performance.now();
+  try {
+    parse(xml);
+  } catch {
+    // ignore — placeholder parser throws
+  }
+  return performance.now() - start;
+}
+
+function clampParam(value: string | null, fallback: number, min: number, max: number): number {
+  return Math.min(Math.max(Number(value ?? fallback), min), max);
 }
 
 export default {
@@ -95,48 +85,29 @@ export default {
     }
 
     if (url.pathname === "/fixtures") {
-      return Response.json({ fixtures: FIXTURE_NAMES });
+      return Response.json({ fixtures: Object.keys(FIXTURES) });
     }
 
     if (url.pathname === "/bench") {
       const fixtureName = url.searchParams.get("fixture") ?? "rss-100k";
-      const iterations = Math.min(
-        Math.max(Number(url.searchParams.get("iterations") ?? "50"), 1),
-        500,
-      );
-      const warmup = Math.min(Math.max(Number(url.searchParams.get("warmup") ?? "5"), 0), 50);
-      const xml = buildFixture(fixtureName);
-      if (xml === undefined) {
+      const iterations = clampParam(url.searchParams.get("iterations"), 50, 1, 500);
+      const warmup = clampParam(url.searchParams.get("warmup"), 5, 0, 50);
+      const build = FIXTURES[fixtureName];
+      if (build === undefined) {
         return Response.json({ error: `unknown fixture: ${fixtureName}` }, { status: 400 });
       }
+      const xml = build();
 
-      for (let index = 0; index < warmup; index++) {
-        try {
-          parse(xml);
-        } catch {
-          // Placeholder parser throws; timing harness still works once implemented.
-          break;
-        }
-      }
+      for (let index = 0; index < warmup; index++) timeParse(xml);
 
       const samples: number[] = [];
-      for (let index = 0; index < iterations; index++) {
-        const start = performance.now();
-        try {
-          parse(xml);
-        } catch {
-          // Until the parser is implemented, record the overhead only.
-        }
-        samples.push(performance.now() - start);
-      }
+      for (let index = 0; index < iterations; index++) samples.push(timeParse(xml));
       samples.sort((a, b) => a - b);
-      const bytes = xml.length;
       const medianMs = quantile(samples, 0.5);
-      const mbPerSec = medianMs > 0 ? bytes / 1024 / 1024 / (medianMs / 1000) : 0;
 
       return Response.json({
         fixture: fixtureName,
-        bytes,
+        bytes: xml.length,
         iterations,
         warmup,
         avgMs: mean(samples),
@@ -145,7 +116,7 @@ export default {
         p99Ms: quantile(samples, 0.99),
         minMs: samples[0] ?? 0,
         maxMs: samples.at(-1) ?? 0,
-        mbPerSec,
+        mbPerSec: medianMs > 0 ? xml.length / 1024 / 1024 / (medianMs / 1000) : 0,
         timestamp: new Date().toISOString(),
       });
     }

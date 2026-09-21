@@ -25,7 +25,7 @@ describe("parse: many small docs (burst)", () => {
         try {
           parse(doc);
         } catch {
-          break;
+          // overhead baseline until parser lands
         }
       }
     },

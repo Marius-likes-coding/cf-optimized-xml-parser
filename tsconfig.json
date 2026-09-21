@@ -13,11 +13,7 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "skipLibCheck": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "dist",
-    "types": ["node", "@cloudflare/workers-types", "vite/client"],
+    "types": ["node", "@cloudflare/workers-types"],
     "noEmit": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true

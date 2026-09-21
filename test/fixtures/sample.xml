@@ -1,2 +1,0 @@
-<note>Large XML fixtures are generated, not checked in. Run `npm run fixtures:generate`.</note>
-<rss version="2.0"><channel><title>Bench sample</title><item id="0"><title>Item</title></item></channel></rss>
