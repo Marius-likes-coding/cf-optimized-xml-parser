@@ -108,6 +108,7 @@ export default defineConfig(
     files: ["src/bench-worker.ts"],
     rules: {
       "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
       "unicorn/prevent-abbreviations": "off",
       "unicorn/prefer-at": "off",
     },
