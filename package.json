@@ -1,6 +1,6 @@
 {
   "name": "cf-optimized-xml-parser",
-  "version": "0.0.0-development",
+  "version": "1.0.0",
   "description": "Extremely efficient XML parser exploiting Cloudflare Workers runtime characteristics.",
   "type": "module",
   "main": "./dist/index.js",
