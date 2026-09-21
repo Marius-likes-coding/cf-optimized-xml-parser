@@ -1,0 +1,94 @@
+{
+  "name": "cf-optimized-xml-parser",
+  "version": "0.0.0-development",
+  "description": "Extremely efficient XML parser exploiting Cloudflare Workers runtime characteristics.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "author": "marius-likes-coding",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marius-likes-coding/cf-optimized-xml-parser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/marius-likes-coding/cf-optimized-xml-parser/issues"
+  },
+  "homepage": "https://github.com/marius-likes-coding/cf-optimized-xml-parser#readme",
+  "keywords": [
+    "xml",
+    "parser",
+    "cloudflare",
+    "workers",
+    "workerd",
+    "fast"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.6.2",
+  "scripts": {
+    "dev": "tsdown --watch",
+    "build": "tsdown",
+    "prepack": "npm run build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project workers",
+    "test:watch": "vitest --project workers",
+    "test:coverage": "vitest run --project workers --coverage",
+    "fixtures:generate": "node scripts/generate-fixtures.mjs",
+    "bench": "vitest bench --run --project workers",
+    "bench:save": "node scripts/bench-save.mjs",
+    "bench:compare": "node scripts/bench-compare.mjs",
+    "bench:trend": "node scripts/bench-trend.mjs",
+    "bench:remote": "node scripts/bench-remote.mjs",
+    "size": "size-limit",
+    "attw": "attw --pack",
+    "publint": "publint",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260921.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.1",
+    "@semantic-release/npm": "^12.0.1",
+    "@size-limit/file": "^11.1.0",
+    "@types/node": "^26.6.2",
+    "conventional-changelog-conventionalcommits": "^9.1.0",
+    "eslint": "^9.35.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import-x": "^4.16.1",
+    "eslint-plugin-unicorn": "^61.0.2",
+    "globals": "^17.12.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.6",
+    "prettier": "^3.6.2",
+    "prettier-plugin-organize-imports": "^4.3.0",
+    "publint": "^0.3.12",
+    "semantic-release": "^24.2.1",
+    "size-limit": "^11.1.0",
+    "tsdown": "^0.15.7",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.0",
+    "vitest": "^4.0.0",
+    "wrangler": "^4.26.0"
+  }
+}

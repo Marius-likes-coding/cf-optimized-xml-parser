@@ -1,0 +1,78 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-type-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run publint
+      - run: npx attw --pack
+      - run: npm run size
+
+  unit-workerd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run fixtures:generate
+      - run: npm test
+
+  bench-compare:
+    runs-on: ubuntu-latest
+    needs: [unit-workerd]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run fixtures:generate
+      - name: Restore baseline (main history latest)
+        run: |
+          LATEST=$(ls -1 bench/history/*.json 2>/dev/null | sort | tail -n 1 || true)
+          if [ -n "$LATEST" ]; then cp "$LATEST" bench/results/baseline.json; echo "baseline=$LATEST" >> "$GITHUB_STEP_SUMMARY"; else echo "No history yet — first run."; fi
+      - name: Run bench
+        run: npx vitest bench --run --project workers --outputJson=bench/results/vitest-bench.json || npx vitest bench --run --outputJson=bench/results/vitest-bench.json
+      - run: node scripts/bench-save.mjs bench/results/vitest-bench.json bench/results/current.json
+      - run: node scripts/bench-compare.mjs
+        env:
+          REGRESSION_THRESHOLD: 10
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: bench-current
+          path: bench/results/current.json
+      - name: Commit history (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          mkdir -p bench/history
+          cp bench/results/current.json "bench/history/$(date -u +%F)-$(git rev-parse --short HEAD).json"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bench/history/
+          git diff --cached --quiet || git commit -m "chore(bench): record history [skip ci]"
+          git push

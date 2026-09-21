@@ -1,0 +1,7 @@
+name = "cf-optimized-xml-parser-bench"
+main = "src/bench-worker.ts"
+compatibility_date = "2026-08-01"
+account_id = "d1614c307ac7e99df62e04fe6b3f6933"
+
+[observability]
+enabled = true

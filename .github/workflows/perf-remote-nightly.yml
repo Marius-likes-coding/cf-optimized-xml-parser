@@ -1,0 +1,45 @@
+name: perf-remote-nightly
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  remote-bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run fixtures:generate
+      - run: npm run build
+      - name: Deploy bench worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: d1614c307ac7e99df62e04fe6b3f6933
+          command: deploy
+      - name: Run remote bench
+        run: node scripts/bench-remote.mjs
+        env:
+          BENCH_URL: ${{ vars.BENCH_URL }}
+      - uses: actions/upload-artifact@v5
+        with:
+          name: bench-remote
+          path: bench/results/remote-*.json
+      - name: Commit remote history
+        run: |
+          mkdir -p bench/history
+          cp bench/results/remote-*.json bench/history/ || true
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bench/history/
+          git diff --cached --quiet || git commit -m "chore(bench): remote history [skip ci]"
+          git push

@@ -1,0 +1,17 @@
+[tools]
+node = "24"
+
+[settings]
+yes_to_all = true
+
+[tasks.test]
+run = "npm test"
+description = "run unit tests in workerd"
+
+[tasks.bench]
+run = "npm run bench"
+description = "run local benchmarks"
+
+[tasks.build]
+run = "npm run build"
+description = "build library"
