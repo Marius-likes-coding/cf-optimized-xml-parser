@@ -21,7 +21,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/marius-likes-coding/cf-optimized-xml-parser.git"
+    "url": "https://github.com/Marius-likes-coding/cf-optimized-xml-parser.git"
   },
   "bugs": {
     "url": "https://github.com/marius-likes-coding/cf-optimized-xml-parser/issues"
