@@ -33,13 +33,6 @@ jobs:
       - uses: actions/upload-artifact@v5
         with:
           name: bench-remote
-          path: bench/results/remote-*.json
-      - name: Commit remote history
-        run: |
-          mkdir -p bench/history
-          cp bench/results/remote-*.json bench/history/ || true
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add bench/history/
-          git diff --cached --quiet || git commit -m "chore(bench): remote history [skip ci]"
-          git push
+          path: bench/results/remote.json
+      - name: Record remote history (bench-history branch)
+        run: node scripts/bench-record.mjs bench/results/remote.json remote

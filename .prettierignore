@@ -3,6 +3,6 @@ node_modules
 .wrangler
 coverage
 bench/results/current.json
-bench/results/remote-*.json
+bench/results/remote.json
 test/fixtures/generated/
 *.tsbuildinfo

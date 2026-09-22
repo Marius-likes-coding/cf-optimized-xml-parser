@@ -58,7 +58,7 @@
     "bench:trend": "node scripts/bench-trend.mjs",
     "bench:remote": "node scripts/bench-remote.mjs",
     "size": "size-limit",
-    "attw": "attw --pack",
+    "attw": "attw --pack --profile esm-only",
     "publint": "publint",
     "prepare": "husky"
   },

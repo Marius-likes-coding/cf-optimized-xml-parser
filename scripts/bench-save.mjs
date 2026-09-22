@@ -8,7 +8,7 @@
  *   node scripts/bench-save.mjs [input] [output]
  *
  * Vitest bench JSON shape: { files: [{ filepath, groups: [{ fullName, benchmarks: [{
- *   name, hz, mean (ms), min, max, median, p75, p99, sampleCount }] }] }] }
+ *   name, hz, rme (%), mean (ms), min, max, median, p75, p99, sampleCount }] }] }] }
  */
 import { execSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -29,15 +29,21 @@ const results = [];
 for (const f of raw.files ?? []) {
   for (const group of f.groups ?? []) {
     for (const b of group.benchmarks ?? []) {
+      // bench/harness.ts names cases `<name> [×N]`, one sample = N passes; store per-pass numbers.
+      const match = /^(.*) \[×(\d+)\]$/.exec(b.name);
+      const repeats = match ? Number(match[2]) : 1;
+      const perPass = (ms) => (ms == null ? null : ms / repeats);
       results.push({
-        name: `${group.fullName ?? f.filepath ?? ""} > ${b.name}`,
-        hz: b.hz ?? null,
-        avgMs: b.mean ?? null,
-        minMs: b.min ?? null,
-        maxMs: b.max ?? null,
-        p50Ms: b.median ?? null,
-        p99Ms: b.p99 ?? null,
+        name: `${group.fullName ?? f.filepath ?? ""} > ${match ? match[1] : b.name}`,
+        hz: b.hz == null ? null : b.hz * repeats,
+        rme: b.rme ?? null,
+        avgMs: perPass(b.mean),
+        minMs: perPass(b.min),
+        maxMs: perPass(b.max),
+        p50Ms: perPass(b.median),
+        p99Ms: perPass(b.p99),
         samples: b.sampleCount ?? null,
+        repeats,
       });
     }
   }

@@ -1,34 +1,26 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { bench, describe } from "vitest";
-import { parse } from "../src/index.js";
+/// <reference types="vite/client" />
+import { describe } from "vitest";
+import { benchParse } from "./harness.js";
 
 /** Throughput: many small docs parsed back-to-back (burst / batch workloads). */
-function loadMany(limit = 50): string[] {
-  try {
-    const dir = new URL("../test/fixtures/generated/many/", import.meta.url);
-    const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".xml"))
-      .slice(0, limit);
-    return files.map((f) => readFileSync(new URL(f, dir), "utf8"));
-  } catch {
-    return Array.from({ length: 20 }, () => `<item id="1">hello</item>`);
-  }
+const BURST_SIZE = 50;
+
+// Loaded through Vite: node:fs cannot see host files from inside workerd.
+const corpus = import.meta.glob<string>("../test/fixtures/generated/many/*.xml", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+const DOCS = Object.keys(corpus)
+  .sort()
+  .slice(0, BURST_SIZE)
+  .map((path) => corpus[path] ?? "");
+if (DOCS.length < BURST_SIZE) {
+  throw new Error(
+    `expected ${BURST_SIZE} docs in test/fixtures/generated/many/, found ${DOCS.length}; run npm run fixtures:generate`,
+  );
 }
 
-const DOCS = loadMany(50);
-
 describe("parse: many small docs (burst)", () => {
-  bench(
-    "50x ~2KB burst",
-    () => {
-      for (const doc of DOCS) {
-        try {
-          parse(doc);
-        } catch {
-          // overhead baseline until parser lands
-        }
-      }
-    },
-    { time: 800 },
-  );
+  benchParse(`${BURST_SIZE}x ~2KB burst`, DOCS, { time: 800 });
 });

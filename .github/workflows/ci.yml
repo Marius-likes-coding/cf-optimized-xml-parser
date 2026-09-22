@@ -23,7 +23,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run publint
-      - run: npx attw --pack
+      - run: npm run attw
       - run: npm run size
 
   unit-workerd:
@@ -51,10 +51,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run fixtures:generate
-      - name: Restore baseline (main history latest)
+      - name: Restore baseline (latest local run recorded from main)
         run: |
-          LATEST=$(ls -1 bench/history/*.json 2>/dev/null | sort | tail -n 1 || true)
-          if [ -n "$LATEST" ]; then cp "$LATEST" bench/results/baseline.json; echo "baseline=$LATEST" >> "$GITHUB_STEP_SUMMARY"; else echo "No history yet — first run."; fi
+          LATEST=""
+          if git fetch --quiet origin bench-history; then
+            LATEST=$(git ls-tree --name-only FETCH_HEAD local/ | sort | tail -n 1)
+          fi
+          if [ -n "$LATEST" ]; then
+            git show "FETCH_HEAD:$LATEST" > bench/results/baseline.json
+            echo "baseline=$LATEST" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No history yet — first run."
+          fi
       - name: Run bench
         run: npx vitest bench --run --project workers --outputJson=bench/results/vitest-bench.json
       - run: node scripts/bench-save.mjs bench/results/vitest-bench.json bench/results/current.json
@@ -66,13 +74,22 @@ jobs:
         with:
           name: bench-current
           path: bench/results/current.json
-      - name: Commit history (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          mkdir -p bench/history
-          cp bench/results/current.json "bench/history/$(date -u +%F)-$(git rev-parse --short HEAD).json"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add bench/history/
-          git diff --cached --quiet || git commit -m "chore(bench): record history [skip ci]"
-          git push
+
+  # Separate job so only this step gets write access. Records main's numbers even when the
+  # compare flagged a regression; otherwise an accepted slowdown would stay the baseline forever.
+  record-history:
+    runs-on: ubuntu-latest
+    needs: [bench-compare]
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name == 'push' &&
+      (needs.bench-compare.result == 'success' || needs.bench-compare.result == 'failure') }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v2
+      - uses: actions/download-artifact@v5
+        with:
+          name: bench-current
+          path: bench/results
+      - run: node scripts/bench-record.mjs bench/results/current.json local

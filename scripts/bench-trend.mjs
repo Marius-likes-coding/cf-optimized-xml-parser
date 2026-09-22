@@ -1,25 +1,33 @@
 #!/usr/bin/env node
 /**
- * Print trend of a named case across bench/history/*.json
+ * Print trend of a named case across the `bench-history` branch (local/ and remote/ runs).
  * Usage: node scripts/bench-trend.mjs ["substring of case name"]
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 
 const filter = process.argv[2] ?? "";
-const dir = "bench/history";
+const ref = "origin/bench-history";
+const git = (args) => execFileSync("git", args, { stdio: "pipe" }).toString();
+
+try {
+  git(["fetch", "--quiet", "origin", "bench-history:refs/remotes/origin/bench-history"]);
+} catch {
+  // offline or no branch yet: fall back to whatever was fetched before
+}
+
 let files = [];
 try {
-  files = readdirSync(dir)
+  files = git(["ls-tree", "-r", "--name-only", ref])
+    .split("\n")
     .filter((f) => f.endsWith(".json"))
     .sort();
 } catch {
-  console.log("No bench/history yet.");
+  console.log(`No ${ref} yet.`);
   process.exit(0);
 }
 
 for (const f of files) {
-  const data = JSON.parse(readFileSync(join(dir, f), "utf8"));
+  const data = JSON.parse(git(["show", `${ref}:${f}`]));
   for (const r of data.results ?? []) {
     if (filter && !r.name.includes(filter)) continue;
     console.log(

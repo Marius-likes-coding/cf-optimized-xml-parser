@@ -13,7 +13,6 @@ export default defineConfig(
       ".wrangler/**",
       "coverage/**",
       "bench/results/**",
-      "bench/history/**",
       "test/fixtures/generated/**",
       "src/worker-configuration.d.ts",
     ],
@@ -54,6 +53,14 @@ export default defineConfig(
           ],
         },
       ],
+      // @cloudflare/workers-types declares these as `any`, and the workerd test pool runs with
+      // nodejs_compat, so neither tsc nor tests catch them. They are undefined in plain Workers.
+      "no-restricted-globals": [
+        "error",
+        { name: "Buffer", message: "Use Uint8Array with TextEncoder/TextDecoder (Workers-safe)." },
+        { name: "process", message: "Not available in Workers without nodejs_compat." },
+        { name: "global", message: "Use globalThis." },
+      ],
     },
   },
   {
@@ -76,6 +83,12 @@ export default defineConfig(
     },
   },
   {
+    files: ["bench/**/*.ts"],
+    rules: {
+      "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
+    },
+  },
+  {
     // Tests run in workerd: browser-ish globals.
     files: ["test/**/*.ts"],
     languageOptions: {
@@ -86,7 +99,7 @@ export default defineConfig(
     },
   },
   {
-    files: ["src/bench-worker.ts"],
+    files: ["src/bench-worker.ts", "src/bench-fixtures.ts"],
     rules: {
       "@typescript-eslint/require-await": "off",
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],

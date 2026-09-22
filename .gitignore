@@ -5,7 +5,7 @@ coverage/
 bench/results/current.json
 bench/results/baseline.json
 bench/results/vitest-bench.json
-bench/results/remote-*.json
+bench/results/remote.json
 test/fixtures/generated/*
 !test/fixtures/generated/.gitkeep
 *.tsbuildinfo
