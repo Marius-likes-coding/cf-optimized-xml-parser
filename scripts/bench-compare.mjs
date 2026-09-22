@@ -3,9 +3,10 @@
  * Compare baseline vs current benchmark JSON.
  * - Reads bench/results/baseline.json + bench/results/current.json
  * - Prints markdown table (also to $GITHUB_STEP_SUMMARY when present)
- * - Exits 1 when any case regresses more than REGRESSION_THRESHOLD (default 10%).
+ * - Exits 1 when any case regresses more than REGRESSION_THRESHOLD (default 10%)
+ *   and more than the two runs' combined relative margin of error (rme).
  *
- * Schema per file: { sha, timestamp, results: [{ name, hz, avgMs, ... }] }
+ * Schema per file: { sha, timestamp, results: [{ name, hz, rme, avgMs, ... }] }
  */
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 
@@ -40,15 +41,19 @@ for (const cur of current.results) {
     continue;
   }
   const deltaPct = ((cur.hz - base.hz) / base.hz) * 100;
-  const status =
-    deltaPct <= -threshold
-      ? "🔴 regression"
+  // A drop only counts when it also exceeds both runs' error margins combined.
+  const noisePct = (base.rme ?? 0) + (cur.rme ?? 0);
+  const regressed = deltaPct <= -threshold && -deltaPct > noisePct;
+  const status = regressed
+    ? "🔴 regression"
+    : deltaPct <= -threshold
+      ? `🟡 within noise (±${noisePct.toFixed(1)}%)`
       : deltaPct <= -5
         ? "🟡 warn"
         : deltaPct >= 5
           ? "🟢 faster"
           : "⚪ same";
-  if (deltaPct <= -threshold) regressions++;
+  if (regressed) regressions++;
   rows.push(
     `| ${cur.name} | ${base.hz.toFixed(1)} | ${cur.hz.toFixed(1)} | ${deltaPct >= 0 ? "+" : ""}${deltaPct.toFixed(1)}% | ${status} |`,
   );
