@@ -69,7 +69,7 @@ jobs:
       - run: node scripts/bench-compare.mjs
         env:
           REGRESSION_THRESHOLD: 10
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bench-current
