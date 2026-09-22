@@ -24,6 +24,10 @@ function gitSha() {
   }
 }
 
+function perPass(ms, repeats) {
+  return ms == null ? null : ms / repeats;
+}
+
 const raw = JSON.parse(readFileSync(input, "utf8"));
 const results = [];
 for (const f of raw.files ?? []) {
@@ -32,16 +36,15 @@ for (const f of raw.files ?? []) {
       // bench/harness.ts names cases `<name> [×N]`, one sample = N passes; store per-pass numbers.
       const match = /^(.*) \[×(\d+)\]$/.exec(b.name);
       const repeats = match ? Number(match[2]) : 1;
-      const perPass = (ms) => (ms == null ? null : ms / repeats);
       results.push({
         name: `${group.fullName ?? f.filepath ?? ""} > ${match ? match[1] : b.name}`,
         hz: b.hz == null ? null : b.hz * repeats,
         rme: b.rme ?? null,
-        avgMs: perPass(b.mean),
-        minMs: perPass(b.min),
-        maxMs: perPass(b.max),
-        p50Ms: perPass(b.median),
-        p99Ms: perPass(b.p99),
+        avgMs: perPass(b.mean, repeats),
+        minMs: perPass(b.min, repeats),
+        maxMs: perPass(b.max, repeats),
+        p50Ms: perPass(b.median, repeats),
+        p99Ms: perPass(b.p99, repeats),
         samples: b.sampleCount ?? null,
         repeats,
       });
