@@ -30,6 +30,10 @@ jobs:
         run: node scripts/bench-remote.mjs
         env:
           BENCH_URL: ${{ vars.BENCH_URL }}
+          # Read by `wrangler tail`, which supplies Cloudflare's per-request CPU time.
+          # The token needs the Workers Tail Read permission.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: d1614c307ac7e99df62e04fe6b3f6933
       - uses: actions/upload-artifact@v5
         with:
           name: bench-remote
