@@ -53,10 +53,20 @@ npx wrangler deploy
 BENCH_URL=https://<your-worker>.workers.dev npm run bench:remote
 ```
 
-Hits `src/bench-worker.ts#/bench`. Deployed Workers only advance
-`performance.now()` after I/O, so the Worker times batches of parses between
-subrequests to a small URL and subtracts the round-trip, measured with empty
-batches. If the clock never advances, it returns an error instead of zeros.
-Fixtures come from `src/bench-fixtures.ts`, the same builders the local
-generator uses. Results go to `bench/results/remote.json`, and the nightly
-workflow records them on the `bench-history` branch.
+Deployed Workers never count JavaScript execution in `performance.now()` or
+`Date.now()`; after I/O the clock moves only by the I/O wait. So nothing inside
+the Worker can time `parse()`, and timing requests from outside buries a few ms
+of work in network jitter. Instead, `scripts/bench-remote.mjs` runs
+`wrangler tail`, which reports Cloudflare's own CPU time for every request, and
+sends tagged `/run?fixture=…&count=n` requests. Parse cost is the mean CPU of
+`count=n` requests minus that of `count=0` requests, divided by `n`. Each
+request targets ~8 ms of parse CPU (`TARGET_MS`), because the Workers Free plan
+allows 10 ms per request and rejects sustained overruns with error 1102.
+
+Needs a token with **Workers Tail Read** (`CLOUDFLARE_API_TOKEN` in CI, or
+`wrangler login` locally). Each result carries `stdErrPct`, the error within
+that run. Numbers also depend on which Cloudflare hardware served the run: the
+same code measured 3.0 µs and 4.6 µs on different runs, so treat single
+nightly points as rough. Fixtures come from `src/bench-fixtures.ts`, the same
+builders the local generator uses. Results go to `bench/results/remote.json`,
+and the nightly workflow records them on the `bench-history` branch.
