@@ -34,7 +34,7 @@ jobs:
           # The token needs the Workers Tail Read permission.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: d1614c307ac7e99df62e04fe6b3f6933
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: bench-remote
           path: bench/results/remote.json
