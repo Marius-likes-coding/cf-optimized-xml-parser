@@ -2,6 +2,7 @@
  * cf-optimized-xml-parser: a fast, spec-correct XML parser for Cloudflare Workers.
  * Web APIs only: no `node:*` imports, no `Buffer`. Target: workerd (ES2025).
  */
+import { decodeInput } from "./decode.js";
 import { parseString, resetParser } from "./parse-string.js";
 import type { ParseOptions, XmlDocument } from "./types.js";
 
@@ -37,11 +38,23 @@ function limit(value: number | undefined, fallback: number, name: string): numbe
 
 /**
  * Parses an XML document into `{ root, children }`. Throws `XmlError` if the input isn't
- * well-formed or exceeds a limit. Strings in the result are slices of `xml`: keep the result
- * only as long as the input may stay in memory (typically one request).
+ * well-formed or exceeds a limit.
+ *
+ * Input is a string, or bytes (`Uint8Array`, any other `ArrayBufferView`, or `ArrayBuffer`),
+ * which are decoded once: the byte order mark or the declaration's `encoding` decides, UTF-8
+ * otherwise; invalid byte sequences throw. Strings in the result are slices of the (decoded)
+ * input: keep the result only as long as the input may stay in memory (typically one request).
  */
-export function parse(xml: string, options?: ParseOptions): XmlDocument {
-  if (typeof xml !== "string") throw new TypeError("parse() expects a string");
+export function parse(
+  input: string | ArrayBufferView | ArrayBuffer,
+  options?: ParseOptions,
+): XmlDocument {
+  let xml: string;
+  if (typeof input === "string") xml = input;
+  else if (input instanceof ArrayBuffer) xml = decodeInput(new Uint8Array(input));
+  else if (ArrayBuffer.isView(input)) {
+    xml = decodeInput(new Uint8Array(input.buffer, input.byteOffset, input.byteLength));
+  } else throw new TypeError("parse() expects a string, an ArrayBuffer or an ArrayBufferView");
   const maxDepth = limit(options?.maxDepth, 256, "maxDepth");
   const maxAttributes = limit(options?.maxAttributes, 200, "maxAttributes");
   const maxNameLength = limit(options?.maxNameLength, 1000, "maxNameLength");
