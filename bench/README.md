@@ -56,6 +56,23 @@ SOAP, OOXML, entity-heavy, small documents, 1 MB) in four encodings: ASCII, Lati
 characters above U+00FF (which makes V8 store the whole document two-byte) and CJK.
 `manifest.json` records each fixture's size, tag count and string representation.
 
+## Current standing (2026-09-29)
+
+Total CPU over the first 100 parses in a fresh isolate (`npm run bench:cold`, production JIT
+flags, ms, lower is better). Details, memory and methodology: `research/spikes/m7-performance.md`.
+
+| fixture (~100 KB)  | this parser | txml | fast-xml-parser |
+| ------------------ | ----------: | ---: | --------------: |
+| rss-ascii          |      **73** |   92 |             439 |
+| svg                |     **135** |  237 |             999 |
+| soap               |     **115** |  161 |             773 |
+| s3-ascii           |      **98** |  111 |             504 |
+| ooxml-ascii        |      **96** |  199 |             936 |
+| sitemap            |      **86** |  123 |             570 |
+| rss-small (3.5 KB) |     **5.4** |  9.3 |            59.5 |
+
+txml decodes no entities and checks almost nothing; fast-xml-parser runs in `preserveOrder` mode.
+
 ## Remember + compare (`bench-history` branch)
 
 ```bash

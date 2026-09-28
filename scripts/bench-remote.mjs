@@ -11,7 +11,8 @@
  * Env:
  *   BENCH_URL             base URL e.g. https://cf-optimized-xml-parser-bench.<subdomain>.workers.dev
  *   CLOUDFLARE_API_TOKEN  for `wrangler tail` (needs Workers Tail Read); a local `wrangler login` works too
- *   FIXTURES              comma list (default: tiny-1k,rss-100k,attrs-heavy-100k,deep-nesting-100k,cdata-heavy-100k,large-1mb)
+ *   FIXTURES              comma list (default: the six synthetic fixtures plus the matrix's
+ *                         rss-ascii, svg, soap, s3-ascii and ooxml-ascii)
  *   SAMPLES               request pairs per fixture, default 40
  *   TARGET_MS             parse CPU per request, default 8: the Workers Free plan allows 10 ms
  *                         CPU per request and rejects sustained overruns with error 1102.
@@ -29,7 +30,7 @@ if (!base) {
 }
 const fixtures = (
   process.env.FIXTURES ??
-  "tiny-1k,rss-100k,attrs-heavy-100k,deep-nesting-100k,cdata-heavy-100k,large-1mb"
+  "tiny-1k,rss-100k,attrs-heavy-100k,deep-nesting-100k,cdata-heavy-100k,large-1mb,rss-ascii,svg,soap,s3-ascii,ooxml-ascii"
 ).split(",");
 const samples = Number(process.env.SAMPLES ?? "40");
 const targetMs = Number(process.env.TARGET_MS ?? "8");

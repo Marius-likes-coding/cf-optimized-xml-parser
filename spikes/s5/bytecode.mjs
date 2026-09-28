@@ -14,7 +14,7 @@ export default {
     return new Response("ok");
   },
 };`);
-const mf = await startWorkerd({ script, flags: `${PROD_FLAGS} --print-bytecode --print-bytecode-filter=parse` });
+const mf = await startWorkerd({ script, flags: `${PROD_FLAGS} --print-bytecode --print-bytecode-filter=${process.env.FILTER ?? "parse"}` });
 const worker = await mf.getWorker("main");
 await (await worker.fetch("http://bytecode/")).text();
 await mf.dispose();

@@ -61,3 +61,18 @@ Cells: decode-once µs / hybrid's change against it.
 ## Memory
 
 Not measured separately. With decode-once, the retained cost is the decoded string (1 B/char, or 2 B/char once any character is above U+00FF) plus the tree from S2. The caller's bytes can be collected once `parse()` returns, unless they keep a reference.
+
+## M3 follow-up measurements (2026-09-29)
+
+- **`fatal: true` costs nothing measurable** (`spikes/m3/decoders.ts`, `INPUT=bytes npm run bench:ab`, Sparkplug and full tiers): −8% to +3% against the default decoder on rss-ascii/latin1/poison/cjk and rss-1mb-poison, which is noise. `parse()` decodes with `fatal: true`, so invalid byte sequences throw. Decode cost per ~114 KB on a quiet machine: ASCII 6 µs, Latin-1 ~165 µs, poison ~100 µs, CJK ~285 µs.
+- **`await response.text()` + `parse(string)` vs `await response.arrayBuffer()` + `parse(bytes)`** (`spikes/m3/response.mjs`, µs per document including the Response machinery, 25 µs resolution):
+
+  | fixture | text() path | arrayBuffer() path |
+  |---|---:|---:|
+  | rss-ascii | 350 | 400 |
+  | rss-latin1 | 600 | 575 |
+  | rss-poison | 525 | 525 |
+  | rss-cjk | 1000 | 775 |
+  | s3-cjk | 875 | 850 |
+
+  No consistent winner (±20%, varying by fixture). README guidance: pass whichever the caller already has; bytes additionally get encoding detection and strict UTF-8 validation.

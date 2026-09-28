@@ -47,7 +47,8 @@ export const FIXTURES: Record<string, () => string> = {
   "tiny-1k": () => rssFeed(5, 60),
   "rss-100k": () => rssFeed(300, 200),
   "attrs-heavy-100k": () => attrsHeavy(1200, 8),
-  "deep-nesting-100k": () => deepNesting(1200, 60),
+  // 250 levels: parse() allows depth 256 by default (docs/implementation-plan.md, M2).
+  "deep-nesting-100k": () => deepNesting(250, 370),
   "cdata-heavy-100k": () => cdataHeavy(300, 250),
   "large-1mb": () => rssFeed(3000, 220),
   "large-5mb": () => rssFeed(14_000, 250),
