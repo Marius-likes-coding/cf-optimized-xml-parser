@@ -10,7 +10,7 @@
  * production, 2026-09-26). Nothing in here can time parse(), so the client times each
  * request and subtracts a count=0 request, which leaves the parse time.
  */
-import { FIXTURES } from "./bench-fixtures.js";
+import { FIXTURES, MATRIX } from "./bench-fixtures.js";
 import { parse } from "./index.js";
 
 /** Sanity cap only; the client sizes `count` so each request stays well under the CPU limit. */
@@ -20,7 +20,7 @@ const MAX_COUNT = 2 ** 20;
 const built = new Map<string, string>();
 
 function fixture(name: string): string | undefined {
-  const build = FIXTURES[name];
+  const build = FIXTURES[name] ?? MATRIX[name];
   if (build === undefined) return undefined;
   let xml = built.get(name);
   if (xml === undefined) {
@@ -47,7 +47,7 @@ export default {
     }
 
     if (url.pathname === "/fixtures") {
-      return Response.json({ fixtures: Object.keys(FIXTURES) });
+      return Response.json({ fixtures: [...Object.keys(FIXTURES), ...Object.keys(MATRIX)] });
     }
 
     if (url.pathname === "/run") {

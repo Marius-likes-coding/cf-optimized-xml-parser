@@ -28,6 +28,34 @@ Two workerd quirks shape these files:
   count shows in the console name (`tiny rss [×11360]`), and `bench-save`
   divides it back out, so saved ops/s and ms are per pass and compare across runs.
 
+`npm run bench` runs with the production JIT flags (`scripts/v8-profiles.mjs`): Cloudflare
+compiles optimized code on the request thread, while open-source workerd defaults to
+background compilation. A case whose parser throws is named `<case> (throws)`, so it is
+never compared with a case that really parses.
+
+## Design measurements (local workerd)
+
+Tools for comparing parser designs, used by the spikes in `research/spikes/`. They take any
+module export as the parser (`path/to/module.ts#export`, default export name `parse`) and run it
+in local workerd:
+
+| Command                                       | Measures                                                                                                              |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `npm run bench:tiers -- <project> [filters]`  | a vitest bench project under each tier-pinned profile (Ignition, Sparkplug, Maglev, full)                             |
+| `npm run bench:ab -- <a>,<b>[,…] [fixtures]`  | interleaved A/B bursts in one isolate, median per variant; resists the 20–50% drift between minutes on a busy machine |
+| `npm run bench:cold -- <a>[,<b>…] [fixtures]` | fresh isolates: parse #1, #2–10, #11–100 and the total over the first 100 parses (the decisive metric)                |
+| `npm run bench:memory -- <spec> [fixtures]`   | retained heap of the input string and the parsed tree, via DevTools heap usage after forced GCs                       |
+| `npm run bench:competitors`                   | txml and fast-xml-parser on the fixture matrix (`bench/compare/`)                                                     |
+
+`INPUT=bytes` hands the parser a `Uint8Array` instead of a string (ab, cold, memory).
+`scripts/with-v8-profile.mjs <profile> <command>` runs any command under one profile.
+
+The fixture matrix (`MATRIX` in `src/bench-fixtures.ts`, generated into
+`test/fixtures/generated/matrix/`) covers real workload shapes (RSS, sitemap, S3 listing, SVG,
+SOAP, OOXML, entity-heavy, small documents, 1 MB) in four encodings: ASCII, Latin-1, a few
+characters above U+00FF (which makes V8 store the whole document two-byte) and CJK.
+`manifest.json` records each fixture's size, tag count and string representation.
+
 ## Remember + compare (`bench-history` branch)
 
 ```bash

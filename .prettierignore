@@ -6,3 +6,6 @@ bench/results/current.json
 bench/results/remote.json
 test/fixtures/generated/
 *.tsbuildinfo
+bench/results/tiers-*.json
+spikes/
+research/

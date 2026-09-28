@@ -63,8 +63,9 @@ jobs:
           else
             echo "No history yet — first run."
           fi
+      # Production JIT flags (compilation on the request thread), see scripts/v8-profiles.mjs.
       - name: Run bench
-        run: npx vitest bench --run --project workers --outputJson=bench/results/vitest-bench.json
+        run: node scripts/with-v8-profile.mjs full npx vitest bench --run --project workers --outputJson=bench/results/vitest-bench.json
       - run: node scripts/bench-save.mjs bench/results/vitest-bench.json bench/results/current.json
       - run: node scripts/bench-compare.mjs
         env:

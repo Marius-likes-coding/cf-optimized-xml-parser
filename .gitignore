@@ -10,3 +10,4 @@ test/fixtures/generated/*
 !test/fixtures/generated/.gitkeep
 *.tsbuildinfo
 .dev.vars
+bench/results/tiers-*.json

@@ -15,6 +15,8 @@ export default defineConfig(
       "bench/results/**",
       "test/fixtures/generated/**",
       "src/worker-configuration.d.ts",
+      // Throwaway design experiments; readability is explicitly not a goal there.
+      "spikes/**",
     ],
   },
   eslint.configs.recommended,
