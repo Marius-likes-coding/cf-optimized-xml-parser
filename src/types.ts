@@ -38,3 +38,13 @@ export interface XmlDocument {
   /** Every top-level node in document order: comments, processing instructions and the root. */
   children: XmlNode[];
 }
+
+/** Limits that bound the work and memory a document can cause. All are optional. */
+export interface ParseOptions {
+  /** Maximum element nesting depth. Default 256. */
+  maxDepth?: number;
+  /** Maximum attributes on one element. Default 200. */
+  maxAttributes?: number;
+  /** Maximum length of an element, attribute or PI target name, in UTF-16 code units. Default 1000. */
+  maxNameLength?: number;
+}

@@ -1,6 +1,24 @@
 /* eslint-disable unicorn/prefer-code-point -- compares UTF-16 code units, like the scanner. */
 import { fail } from "./errors.js";
 
+/** Literal text is kept as is. */
+export const RAW = 0;
+/** Line endings normalized: `\r\n` and `\r` become `\n` (XML 1.0 §2.11). */
+export const LINE_ENDS = 1;
+/** Attribute value: `\r\n` and each literal tab, newline or CR become one space (§3.3.3). */
+export const ATTRIBUTE = 2;
+
+const LINE_END_RE = /\r\n?/g;
+const ATTRIBUTE_WS_RE = /\r\n|[\t\n\r]/g;
+
+/** Applies a normalization mode to literal text (never to text produced by a reference). */
+export function normalize(text: string, mode: number): string {
+  if (mode === RAW) return text;
+  return mode === LINE_ENDS
+    ? text.replaceAll(LINE_END_RE, "\n")
+    : text.replaceAll(ATTRIBUTE_WS_RE, " ");
+}
+
 /**
  * Set by decodeEntities: the first "&" at or after the end of the decoded range (or the
  * string's length), so the parser's memoized "&" position stays valid without a new search.
@@ -20,14 +38,21 @@ function isXmlChar(code: number): boolean {
 
 /**
  * Text of `source[start, end)` with the five predefined entities and character references
- * expanded. `amp` is the first "&" in the range. Any other entity is an error: DTD entities are
- * never expanded (DOCTYPE is skipped).
+ * expanded, and the literal text between them normalized per `mode`. `amp` is the first "&" in
+ * the range. Any other entity is an error: DTD entities are never expanded (DOCTYPE is
+ * skipped). Characters produced by references are never normalized, as the spec requires.
  */
-export function decodeEntities(source: string, start: number, end: number, amp: number): string {
+export function decodeEntities(
+  source: string,
+  start: number,
+  end: number,
+  amp: number,
+  mode: number,
+): string {
   let out = "";
   let pos = start;
   while (amp < end) {
-    out += source.slice(pos, amp);
+    out += normalize(source.slice(pos, amp), mode);
     const semi = source.indexOf(";", amp + 1);
     if (semi === -1 || semi >= end) fail("unterminated entity reference", source, amp);
     const size = semi - amp;
@@ -62,5 +87,5 @@ export function decodeEntities(source: string, start: number, end: number, amp: 
     if (amp === -1) amp = source.length;
   }
   ampAfter = amp;
-  return out + source.slice(pos, end);
+  return out + normalize(source.slice(pos, end), mode);
 }

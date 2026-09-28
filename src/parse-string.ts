@@ -1,21 +1,30 @@
 /* eslint-disable unicorn/prefer-code-point -- UTF-16 code units are what the scanner compares; codePointAt adds a surrogate branch per read. */
 /**
  * The parser's one hot function. Design and measurements: research/spikes/ (S1 scanner, S2 tree
- * building, S5 JIT behavior) and docs/implementation-plan.md.
+ * building, S4 correctness costs, S5 JIT behavior) and docs/implementation-plan.md.
  *
  * - Scanning is builtin-driven: indexOf finds text runs, markup ends and attribute-value ends;
- *   names are skipped with a sticky regex's test(); "&" is found by one memoized search.
+ *   names are matched with a sticky regex's test(). Checks that need a search share memoized
+ *   positions (next "&", "\r", "]]>", tab/newline/CR), so a document without them pays one
+ *   failed search each.
  * - Nodes are one object-literal shape. Children are collected on a module-level scratch stack
  *   and copied out with slice() at the end tag; a lone text child is stored as the string.
  * - Module-level arrays keep one elements kind for the life of the isolate, so optimized code
  *   never deopts on them (S5). Nothing is left in them after a parse (see resetParser).
  */
-import { ampAfter, decodeEntities } from "./entities.js";
+import { ampAfter, ATTRIBUTE, decodeEntities, LINE_ENDS, normalize, RAW } from "./entities.js";
 import { fail } from "./errors.js";
 import type { XmlDocument, XmlElement, XmlNode } from "./types.js";
 
-/** Names: up to whitespace, "/", ">", "=" or a stray "<" (which then fails the tag). */
-const NAME_RE = /[^\s/<=>]+/y;
+/** XML 1.0 (5th ed.) §2.3 Name = NameStartChar NameChar*. Sticky; used with test() only. */
+const NAME_RE =
+  /[:A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}][\w.:\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C-\u200D\u203F-\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}-]*/uy;
+/** Next tab, newline or CR, for attribute-value normalization (global: test() + lastIndex). */
+const WS_RE = /[\t\n\r]/g;
+/** XMLDecl content after "<?xml": version, then optional encoding and standalone (§2.8, §4.3.3). */
+const DECLARATION_RE =
+  /^version[\t\n\r ]*=[\t\n\r ]*(["'])(1\.\d+)\1(?:[\t\n\r ]+encoding[\t\n\r ]*=[\t\n\r ]*(["'])[A-Za-z][\w.-]*\3)?(?:[\t\n\r ]+standalone[\t\n\r ]*=[\t\n\r ]*(["'])(?:yes|no)\4)?[\t\n\r ]*$/;
+const MAX_DOCTYPE = 65_536;
 
 const scratch: XmlNode[] = [""];
 const attributeScratch: string[] = [""];
@@ -33,7 +42,7 @@ export function resetParser(): void {
 function skipDoctype(xml: string, start: number): number {
   let depth = 0;
   let quote = 0;
-  const limit = Math.min(xml.length, start + 65_536);
+  const limit = Math.min(xml.length, start + MAX_DOCTYPE);
   for (let p = start; p < limit; p++) {
     const ch = xml.charCodeAt(p);
     if (quote !== 0) {
@@ -82,7 +91,19 @@ function skipDoctype(xml: string, start: number): number {
   );
 }
 
-export function parseString(xml: string): XmlDocument {
+/** Checks the XML declaration's content (between "<?xml" and "?>"). */
+function checkDeclaration(xml: string, start: number, end: number): void {
+  const declaration = DECLARATION_RE.exec(xml.slice(start, end));
+  if (declaration === null) fail("malformed XML declaration", xml, start);
+  if (declaration[2] !== "1.0") fail("only XML 1.0 is supported", xml, start);
+}
+
+export function parseString(
+  xml: string,
+  maxDepth: number,
+  maxAttributes: number,
+  maxNameLength: number,
+): XmlDocument {
   const length = xml.length;
   const open = openStack;
   const frames = frameStack;
@@ -91,8 +112,14 @@ export function parseString(xml: string): XmlDocument {
   let top = 0;
   let root: XmlElement | null = null;
   let lastText = false;
+  let seenDoctype = false;
   let amp = xml.indexOf("&");
   if (amp === -1) amp = length;
+  let cr = xml.indexOf("\r");
+  if (cr === -1) cr = length;
+  let cdataEnd = xml.indexOf("]]>");
+  if (cdataEnd === -1) cdataEnd = length;
+  let tabOrBreak = -1;
   let lt = xml.indexOf("<");
   if (lt === -1) fail("no root element", xml, 0);
   const bom = xml.charCodeAt(0) === 0xfe_ff ? 1 : 0;
@@ -110,15 +137,25 @@ export function parseString(xml: string): XmlDocument {
       }
       if (p < textEnd) {
         if (open.length === 0) fail("text outside the root element", xml, p);
+        if (cdataEnd < textStart) {
+          cdataEnd = xml.indexOf("]]>", textStart);
+          if (cdataEnd === -1) cdataEnd = length;
+        }
+        if (cdataEnd < textEnd) fail('"]]>" in text', xml, cdataEnd);
         if (amp < textStart) {
           amp = xml.indexOf("&", textStart);
           if (amp === -1) amp = length;
         }
+        if (cr < textStart) {
+          cr = xml.indexOf("\r", textStart);
+          if (cr === -1) cr = length;
+        }
+        const mode = cr < textEnd ? LINE_ENDS : RAW;
         let value: string;
         if (amp < textEnd) {
-          value = decodeEntities(xml, textStart, textEnd, amp);
+          value = decodeEntities(xml, textStart, textEnd, amp, mode);
           amp = ampAfter;
-        } else value = xml.slice(textStart, textEnd);
+        } else value = normalize(xml.slice(textStart, textEnd), mode);
         if (lastText) scratch[top - 1] = (scratch[top - 1] as string) + value;
         else {
           scratch[top++] = value;
@@ -155,14 +192,28 @@ export function parseString(xml: string): XmlDocument {
       if (xml.charCodeAt(lt + 2) === 45 && xml.charCodeAt(lt + 3) === 45) {
         const end = xml.indexOf("-->", lt + 4);
         if (end === -1) fail("unterminated comment", xml, lt);
-        scratch[top++] = { name: "#comment", attrs: null, children: xml.slice(lt + 4, end) };
+        if (xml.indexOf("--", lt + 4) < end || (end > lt + 4 && xml.charCodeAt(end - 1) === 45))
+          fail('"--" inside a comment', xml, lt);
+        if (cr < lt) {
+          cr = xml.indexOf("\r", lt);
+          if (cr === -1) cr = length;
+        }
+        scratch[top++] = {
+          name: "#comment",
+          attrs: null,
+          children: normalize(xml.slice(lt + 4, end), cr < end ? LINE_ENDS : RAW),
+        };
         lastText = false;
         textStart = end + 3;
       } else if (xml.startsWith("[CDATA[", lt + 2)) {
         if (open.length === 0) fail("CDATA section outside the root element", xml, lt);
         const end = xml.indexOf("]]>", lt + 9);
         if (end === -1) fail("unterminated CDATA section", xml, lt);
-        const value = xml.slice(lt + 9, end);
+        if (cr < lt) {
+          cr = xml.indexOf("\r", lt);
+          if (cr === -1) cr = length;
+        }
+        const value = normalize(xml.slice(lt + 9, end), cr < end ? LINE_ENDS : RAW);
         if (lastText) scratch[top - 1] = (scratch[top - 1] as string) + value;
         else {
           scratch[top++] = value;
@@ -170,6 +221,8 @@ export function parseString(xml: string): XmlDocument {
         }
         textStart = end + 3;
       } else if (xml.startsWith("DOCTYPE", lt + 2)) {
+        if (root !== null || seenDoctype) fail("DOCTYPE after the root or repeated", xml, lt);
+        seenDoctype = true;
         textStart = skipDoctype(xml, lt + 9);
       } else fail("unknown markup declaration", xml, lt);
       lt = xml.indexOf("<", textStart);
@@ -178,17 +231,34 @@ export function parseString(xml: string): XmlDocument {
     if (c === 63) {
       const end = xml.indexOf("?>", lt + 2);
       if (end === -1) fail("unterminated processing instruction", xml, lt);
-      let p = lt + 2;
+      NAME_RE.lastIndex = lt + 2;
+      if (!NAME_RE.test(xml)) fail("invalid processing instruction target", xml, lt);
+      let p = NAME_RE.lastIndex;
       let ch = xml.charCodeAt(p);
-      while (p < end && ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13) ch = xml.charCodeAt(++p);
-      if (p === lt + 2) fail("processing instruction without a target", xml, lt);
+      if (p !== end && ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13)
+        fail("invalid processing instruction target", xml, lt);
+      if (p - lt - 2 > maxNameLength) fail("name longer than maxNameLength", xml, lt);
       const target = xml.slice(lt + 2, p);
-      if (target === "xml") {
+      while (p < end && (ch === 32 || ch === 10 || ch === 9 || ch === 13)) ch = xml.charCodeAt(++p);
+      if (
+        target.length === 3 &&
+        (target.charCodeAt(0) | 32) === 120 &&
+        (target.charCodeAt(1) | 32) === 109 &&
+        (target.charCodeAt(2) | 32) === 108
+      ) {
+        if (target !== "xml") fail('processing instruction target "xml" is reserved', xml, lt);
         if (lt !== bom) fail("XML declaration not at the start of the document", xml, lt);
+        checkDeclaration(xml, p, end);
       } else {
-        while (p < end && (ch === 32 || ch === 10 || ch === 9 || ch === 13))
-          ch = xml.charCodeAt(++p);
-        scratch[top++] = { name: `?${target}`, attrs: null, children: xml.slice(p, end) };
+        if (cr < lt) {
+          cr = xml.indexOf("\r", lt);
+          if (cr === -1) cr = length;
+        }
+        scratch[top++] = {
+          name: `?${target}`,
+          attrs: null,
+          children: normalize(xml.slice(p, end), cr < end ? LINE_ENDS : RAW),
+        };
         lastText = false;
       }
       textStart = end + 2;
@@ -198,9 +268,12 @@ export function parseString(xml: string): XmlDocument {
 
     // Start tag.
     NAME_RE.lastIndex = lt + 1;
-    if (!NAME_RE.test(xml)) fail("missing element name", xml, lt);
+    if (!NAME_RE.test(xml)) fail("invalid or missing element name", xml, lt);
     let p = NAME_RE.lastIndex;
+    if (p - lt - 1 > maxNameLength) fail("name longer than maxNameLength", xml, lt);
     let ch = xml.charCodeAt(p);
+    if (ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13 && ch !== 62 && ch !== 47)
+      fail("invalid character in element name", xml, p);
     const name = xml.slice(lt + 1, p);
     let aTop = 0;
     for (;;) {
@@ -208,10 +281,15 @@ export function parseString(xml: string): XmlDocument {
       if (ch === 62 || ch === 47) break;
       const nameStart = p;
       NAME_RE.lastIndex = p;
-      if (!NAME_RE.test(xml)) fail("missing attribute name", xml, p);
+      if (!NAME_RE.test(xml)) fail("invalid or missing attribute name", xml, p);
       p = NAME_RE.lastIndex;
+      if (p - nameStart > maxNameLength) fail("name longer than maxNameLength", xml, nameStart);
       ch = xml.charCodeAt(p);
       const attributeName = xml.slice(nameStart, p);
+      for (let k = 0; k < aTop; k += 2) {
+        if (attributeScratch[k] === attributeName) fail("duplicate attribute", xml, nameStart);
+      }
+      if (aTop === maxAttributes * 2) fail("more attributes than maxAttributes", xml, lt);
       while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = xml.charCodeAt(++p);
       if (ch !== 61) fail('missing "=" after attribute name', xml, p);
       ch = xml.charCodeAt(++p);
@@ -220,15 +298,20 @@ export function parseString(xml: string): XmlDocument {
       const valueStart = p + 1;
       const valueEnd = xml.indexOf(ch === 34 ? '"' : "'", valueStart);
       if (valueEnd === -1) fail("unterminated attribute value", xml, p);
+      if (tabOrBreak < valueStart) {
+        WS_RE.lastIndex = valueStart;
+        tabOrBreak = WS_RE.test(xml) ? WS_RE.lastIndex - 1 : length;
+      }
       if (amp < valueStart) {
         amp = xml.indexOf("&", valueStart);
         if (amp === -1) amp = length;
       }
+      const mode = tabOrBreak < valueEnd ? ATTRIBUTE : RAW;
       let value: string;
       if (amp < valueEnd) {
-        value = decodeEntities(xml, valueStart, valueEnd, amp);
+        value = decodeEntities(xml, valueStart, valueEnd, amp, mode);
         amp = ampAfter;
-      } else value = xml.slice(valueStart, valueEnd);
+      } else value = normalize(xml.slice(valueStart, valueEnd), mode);
       attributeScratch[aTop++] = attributeName;
       attributeScratch[aTop++] = value;
       p = valueEnd + 1;
@@ -253,6 +336,7 @@ export function parseString(xml: string): XmlDocument {
     scratch[top++] = node;
     lastText = false;
     if (!selfClosing) {
+      if (open.length === maxDepth) fail("nesting deeper than maxDepth", xml, lt);
       open.push(node);
       frames.push(top);
     }
