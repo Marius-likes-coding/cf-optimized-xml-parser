@@ -1,0 +1,84 @@
+{
+  "url": "https://cf-optimized-xml-parser-bench.cf-optimized-xml-parser-bench.workers.dev",
+  "timestamp": "2026-09-28T08:06:09.069Z",
+  "results": [
+    {
+      "name": "remote > tiny-1k",
+      "hz": 456438.3561643835,
+      "fixture": "tiny-1k",
+      "bytes": 1153,
+      "count": 3332,
+      "samples": 40,
+      "cpuMs": 0.0021908763505402162,
+      "stdErrPct": 2.2583838996387087,
+      "overheadCpuMs": 0,
+      "mbPerSec": 501.8934485030501,
+      "timestamp": "2026-09-28T08:05:46.017Z"
+    },
+    {
+      "name": "remote > rss-100k",
+      "hz": 397200,
+      "fixture": "rss-100k",
+      "bytes": 106573,
+      "count": 2979,
+      "samples": 40,
+      "cpuMs": 0.0025176233635448137,
+      "stdErrPct": 2.903971148797528,
+      "overheadCpuMs": 0,
+      "mbPerSec": 40369.792556762695,
+      "timestamp": "2026-09-28T08:05:50.570Z"
+    },
+    {
+      "name": "remote > attrs-heavy-100k",
+      "hz": 441635.2201257862,
+      "fixture": "attrs-heavy-100k",
+      "bytes": 189223,
+      "count": 3511,
+      "samples": 40,
+      "cpuMs": 0.0022643121617772714,
+      "stdErrPct": 2.774543001246186,
+      "overheadCpuMs": 0,
+      "mbPerSec": 79696.21778284229,
+      "timestamp": "2026-09-28T08:05:55.177Z"
+    },
+    {
+      "name": "remote > deep-nesting-100k",
+      "hz": 448091.16809116805,
+      "fixture": "deep-nesting-100k",
+      "bytes": 108369,
+      "count": 3932,
+      "samples": 40,
+      "cpuMs": 0.0022316887080366227,
+      "stdErrPct": 2.139307406300552,
+      "overheadCpuMs": 0,
+      "mbPerSec": 46309.654040214344,
+      "timestamp": "2026-09-28T08:05:59.859Z"
+    },
+    {
+      "name": "remote > cdata-heavy-100k",
+      "hz": 446135.6932153392,
+      "fixture": "cdata-heavy-100k",
+      "bytes": 85703,
+      "count": 3781,
+      "samples": 40,
+      "cpuMs": 0.0022414705104469718,
+      "stdErrPct": 2.8242687544434744,
+      "overheadCpuMs": 0.1,
+      "mbPerSec": 36463.897052416054,
+      "timestamp": "2026-09-28T08:06:04.503Z"
+    },
+    {
+      "name": "remote > large-1mb",
+      "hz": 390688.52459016396,
+      "fixture": "large-1mb",
+      "bytes": 1133773,
+      "count": 2979,
+      "samples": 40,
+      "cpuMs": 0.002559583752937227,
+      "stdErrPct": 2.2854538934382003,
+      "overheadCpuMs": 0,
+      "mbPerSec": 422432.0417310371,
+      "timestamp": "2026-09-28T08:06:09.069Z"
+    }
+  ]
+}
