@@ -1,0 +1,102 @@
+{
+  "sha": "e471e6c",
+  "timestamp": "2026-09-28T22:48:54.771Z",
+  "results": [
+    {
+      "name": "bench/large.bench.ts > parse: large documents > rss-100k (single)",
+      "hz": 3946.25,
+      "rme": 2.0539085203071346,
+      "avgMs": 0.25340513145391197,
+      "minMs": 0.18181818181818182,
+      "maxMs": 0.36363636363636365,
+      "p50Ms": 0.2727272727272727,
+      "p99Ms": 0.36363636363636365,
+      "samples": 287,
+      "repeats": 11
+    },
+    {
+      "name": "bench/large.bench.ts > parse: large documents > large-1mb (single)",
+      "hz": 390.6633906633906,
+      "rme": 1.061703107635267,
+      "avgMs": 2.559748427672956,
+      "minMs": 2.5,
+      "maxMs": 2.8333333333333335,
+      "p50Ms": 2.5,
+      "p99Ms": 2.8333333333333335,
+      "samples": 53,
+      "repeats": 6
+    },
+    {
+      "name": "bench/large.bench.ts > parse: large documents > large-5mb (single)",
+      "hz": 76.77165354330708,
+      "rme": 3.179440729224223,
+      "avgMs": 13.025641025641026,
+      "minMs": 11.5,
+      "maxMs": 14.5,
+      "p50Ms": 14,
+      "p99Ms": 14.5,
+      "samples": 39,
+      "repeats": 2
+    },
+    {
+      "name": "bench/many.bench.ts > parse: many small docs (burst) > 50x ~2KB burst",
+      "hz": 2449.438202247191,
+      "rme": 2.2315753271410856,
+      "avgMs": 0.408256880733945,
+      "minMs": 0.3333333333333333,
+      "maxMs": 0.6666666666666666,
+      "p50Ms": 0.3333333333333333,
+      "p99Ms": 0.5,
+      "samples": 327,
+      "repeats": 6
+    },
+    {
+      "name": "bench/small.bench.ts > parse: small shapes > tiny rss",
+      "hz": 718605.577689243,
+      "rme": 1.4453674811162336,
+      "avgMs": 0.001391583966291512,
+      "minMs": 0.000942507068803016,
+      "maxMs": 0.001885014137606032,
+      "p50Ms": 0.001413760603204524,
+      "p99Ms": 0.001885014137606032,
+      "samples": 170,
+      "repeats": 2122
+    },
+    {
+      "name": "bench/small.bench.ts > parse: small shapes > attrs-heavy",
+      "hz": 12702.594810379242,
+      "rme": 1.451829932433539,
+      "avgMs": 0.07872407291011942,
+      "minMs": 0.05405405405405406,
+      "maxMs": 0.08108108108108109,
+      "p50Ms": 0.08108108108108109,
+      "p99Ms": 0.08108108108108109,
+      "samples": 172,
+      "repeats": 37
+    },
+    {
+      "name": "bench/small.bench.ts > parse: small shapes > deep-nesting",
+      "hz": 304592.0792079208,
+      "rme": 0.9843892269657736,
+      "avgMs": 0.003283079463525312,
+      "minMs": 0.00315955766192733,
+      "maxMs": 0.003335088643145515,
+      "p50Ms": 0.003335088643145515,
+      "p99Ms": 0.003335088643145515,
+      "samples": 27,
+      "repeats": 5697
+    },
+    {
+      "name": "bench/small.bench.ts > parse: small shapes > cdata-heavy",
+      "hz": 25850,
+      "rme": 2.51181151368727,
+      "avgMs": 0.03868471953578336,
+      "minMs": 0.02127659574468085,
+      "maxMs": 0.0425531914893617,
+      "p50Ms": 0.0425531914893617,
+      "p99Ms": 0.0425531914893617,
+      "samples": 275,
+      "repeats": 47
+    }
+  ]
+}
