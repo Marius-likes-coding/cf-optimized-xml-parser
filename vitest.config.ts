@@ -15,6 +15,28 @@ export default defineConfig({
           name: "workers",
           pool: "@cloudflare/vitest-pool-workers",
           include: ["test/**/*.test.ts"],
+          // Top-level bench/ only: this project feeds the CI regression gate.
+          benchmark: { include: ["bench/*.bench.ts"] },
+        },
+      },
+      {
+        // Competitor parsers on the fixture matrix. Reference numbers, not a CI gate.
+        extends: true,
+        test: {
+          name: "compare",
+          pool: "@cloudflare/vitest-pool-workers",
+          include: [],
+          benchmark: { include: ["bench/compare/**/*.bench.ts"] },
+        },
+      },
+      {
+        // Throwaway design experiments (see research/spikes/). Never shipped.
+        extends: true,
+        test: {
+          name: "spikes",
+          pool: "@cloudflare/vitest-pool-workers",
+          include: [],
+          benchmark: { include: ["spikes/**/*.bench.ts"] },
         },
       },
     ],
