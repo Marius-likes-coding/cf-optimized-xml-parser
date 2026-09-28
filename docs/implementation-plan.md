@@ -228,6 +228,8 @@ Measured on the matrix fixtures (~100 KB each unless named); local numbers with 
 | deopts after `warmup()` across the fixture sequence | 0 (trace)                                                                                               |
 | Cloudflare, per-request CPU in a fresh isolate      | cold parse ≤ 5 ms for 100 KB; top-tier compile once per isolate                                         |
 
+**Status after M7 (2026-09-29, `research/spikes/m7-performance.md`):** total-100 is 5–11× better than fast-xml-parser everywhere and 1.13–2.07× better than txml (≥ 1.5× on svg, ooxml and small documents; 1.13–1.44× on rss, s3, soap and sitemap, where txml skips entity decoding and checks). The retained tree is below both competitors on 7 of 8 fixtures (svg +22%). Two further experiments showed no gain; the remaining ideas are listed in that note.
+
 ## Risks
 
 - **V8 heuristics change:** the warm-up window (feedback after 8 calls, tier-up budgets) and compile costs depend on V8 internals; production is already on 15.4 while local workerd is 15.1. Mitigation: the M4 trace test and the remote timeline in the M7 nightly.
