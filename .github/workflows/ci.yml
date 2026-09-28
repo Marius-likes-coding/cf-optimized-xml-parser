@@ -38,6 +38,10 @@ jobs:
       - run: npm ci
       - run: npm run fixtures:generate
       - run: npm test
+      # Mutation fuzzing: parse() must return a document or throw XmlError, never crash or hang.
+      - run: npm run fuzz
+        env:
+          ITERATIONS: 50000
 
   bench-compare:
     runs-on: ubuntu-latest

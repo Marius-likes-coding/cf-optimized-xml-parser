@@ -42,6 +42,14 @@ describe("warmup", () => {
         { name: "e", attrs: null, children: null },
         { name: "g", attrs: ["h", "1"], children: null },
         { name: "x", attrs: null, children: null },
+        {
+          name: "w",
+          attrs: Array.from({ length: 18 }, (_, index) => [
+            `a${String(index)}`,
+            String(index),
+          ]).flat(),
+          children: null,
+        },
         { name: "e", attrs: ["x", "1", "y", "2", "z", "3"], children: `t < > " ' ${text}` },
         {
           name: "f",

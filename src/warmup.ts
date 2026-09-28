@@ -16,6 +16,7 @@ const COMMON =
   "<!-- top -->\n<?pi top data?>\n" +
   '<k:root xmlns:k="urn:k" a="1" b=\'x &amp; &#65;&#x42;\' c="t\tu\r\nv &lt;" d="TEXT">\n' +
   '  <e/>\n  <g h="1"/><x></x>\n' +
+  `  <w ${Array.from({ length: 18 }, (_, index) => `a${String(index)}="${String(index)}"`).join(" ")}/>\n` +
   '  <e x="1" y="2" z="3">t &lt; &gt; &quot; &apos; TEXT</e>\n' +
   "  <f>line\r\nbreak &amp; more<![CDATA[c <d> &]]>after &#xE9;&#xe9;&#x1F600;</f>\n" +
   "  <h><![CDATA[first]]></h>\n" +

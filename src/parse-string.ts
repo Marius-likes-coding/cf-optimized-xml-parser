@@ -30,6 +30,8 @@ const scratch: XmlNode[] = [""];
 const attributeScratch: string[] = [""];
 const openStack: XmlElement[] = [{ name: "", attrs: null, children: null }];
 const frameStack: number[] = [0];
+/** Attribute names of the current element once it has more than 16 (see the duplicate check). */
+const seenNames = new Set<string>();
 
 /** Drops every reference the module-level stacks hold (after a parse or a thrown error). */
 export function resetParser(): void {
@@ -37,6 +39,7 @@ export function resetParser(): void {
   attributeScratch.length = 0;
   openStack.length = 0;
   frameStack.length = 0;
+  seenNames.clear();
 }
 
 function skipDoctype(xml: string, start: number): number {
@@ -286,8 +289,19 @@ export function parseString(
       if (p - nameStart > maxNameLength) fail("name longer than maxNameLength", xml, nameStart);
       ch = xml.charCodeAt(p);
       const attributeName = xml.slice(nameStart, p);
-      for (let k = 0; k < aTop; k += 2) {
-        if (attributeScratch[k] === attributeName) fail("duplicate attribute", xml, nameStart);
+      // Duplicate check: a linear scan up to 16 attributes, a Set beyond, so raised limits
+      // can't make it quadratic (20k attributes: 1.2 s linear).
+      if (aTop < 32) {
+        for (let k = 0; k < aTop; k += 2) {
+          if (attributeScratch[k] === attributeName) fail("duplicate attribute", xml, nameStart);
+        }
+      } else {
+        if (aTop === 32) {
+          seenNames.clear();
+          for (let k = 0; k < 32; k += 2) seenNames.add(attributeScratch[k] as string);
+        }
+        if (seenNames.has(attributeName)) fail("duplicate attribute", xml, nameStart);
+        seenNames.add(attributeName);
       }
       if (aTop === maxAttributes * 2) fail("more attributes than maxAttributes", xml, lt);
       while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = xml.charCodeAt(++p);
