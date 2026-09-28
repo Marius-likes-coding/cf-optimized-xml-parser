@@ -11,3 +11,4 @@ test/fixtures/generated/*
 *.tsbuildinfo
 .dev.vars
 bench/results/tiers-*.json
+.cache/

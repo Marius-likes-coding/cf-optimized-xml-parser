@@ -9,3 +9,4 @@ test/fixtures/generated/
 bench/results/tiers-*.json
 spikes/
 research/
+.cache/
