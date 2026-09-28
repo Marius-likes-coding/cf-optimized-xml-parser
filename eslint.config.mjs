@@ -41,8 +41,18 @@ export default defineConfig(
     },
   },
   {
+    // The output format uses null for "none" on purpose: it survives JSON serialization and
+    // costs no memory (research/spikes/s2-tree-building.md). Tests spell out that format.
+    files: ["src/**/*.ts", "test/**/*.ts"],
+    rules: {
+      "unicorn/no-null": "off",
+    },
+  },
+  {
     files: ["src/**/*.ts"],
     rules: {
+      // Conflicts with @typescript-eslint/no-non-null-assertion (strict); keep explicit `as` casts.
+      "@typescript-eslint/non-nullable-type-assertion-style": "off",
       "no-restricted-imports": [
         "error",
         {

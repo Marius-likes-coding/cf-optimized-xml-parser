@@ -1,18 +1,42 @@
 /**
- * cf-optimized-xml-parser
- *
- * Placeholder entry. The actual parser implementation will be written here.
- * Keep this module Web-API only: no `node:*` imports, no `Buffer`.
- * Target: Cloudflare Workers / workerd (ES2025).
+ * cf-optimized-xml-parser: a fast, spec-correct XML parser for Cloudflare Workers.
+ * Web APIs only: no `node:*` imports, no `Buffer`. Target: workerd (ES2025).
  */
+import { parseString, resetParser } from "./parse-string.js";
+import type { XmlDocument } from "./types.js";
 
-/** Parser version placeholder. */
+export { XmlError } from "./errors.js";
+export {
+  attributes,
+  childNodes,
+  getAttribute,
+  isComment,
+  isElement,
+  isProcessingInstruction,
+  textContent,
+} from "./helpers.js";
+export type {
+  XmlComment,
+  XmlDocument,
+  XmlElement,
+  XmlNode,
+  XmlProcessingInstruction,
+} from "./types.js";
+
+/** Package version (set by the release). */
 export const VERSION = "0.0.0-development";
 
 /**
- * Placeholder parse function. Replace with the real implementation.
- * @param _xml XML input string.
+ * Parses an XML document into `{ root, children }`. Throws `XmlError` if the input isn't
+ * well-formed. Strings in the result are slices of `xml`: keep the result only as long as the
+ * input may stay in memory (typically one request).
  */
-export function parse(_xml: string): unknown {
-  throw new Error("Not implemented yet — this is scaffolding.");
+export function parse(xml: string): XmlDocument {
+  if (typeof xml !== "string") throw new TypeError("parse() expects a string");
+  try {
+    return parseString(xml);
+  } catch (error) {
+    resetParser();
+    throw error;
+  }
 }
