@@ -61,7 +61,7 @@ describe("bytes input", () => {
     const view = bytes.subarray(2, -2);
     expect(parse(view).root).toEqual(expected);
     expect(parse(new DataView(bytes.buffer, 2, view.length)).root).toEqual(expected);
-    expect(parse(utf8(text).buffer).root).toEqual(expected);
+    expect(parse(utf8(text).buffer as ArrayBuffer).root).toEqual(expected);
   });
 
   const rejects: [string, Uint8Array][] = [
