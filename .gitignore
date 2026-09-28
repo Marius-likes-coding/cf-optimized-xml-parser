@@ -11,4 +11,6 @@ test/fixtures/generated/*
 *.tsbuildinfo
 .dev.vars
 bench/results/tiers-*.json
+bench/results/xmlconf.json
+bench/results/fuzz-failure.xml
 .cache/
