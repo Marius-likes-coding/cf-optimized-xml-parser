@@ -1,0 +1,102 @@
+{
+  "sha": "3273fce",
+  "timestamp": "2026-09-28T22:02:51.384Z",
+  "results": [
+    {
+      "name": "bench/large.bench.ts > parse: large documents > rss-100k (single) (throws)",
+      "hz": 567537.7942998761,
+      "rme": 1.074451260154392,
+      "avgMs": 0.0017619971921581299,
+      "minMs": 0.0017117791804857174,
+      "maxMs": 0.001925751578046432,
+      "p50Ms": 0.0017117791804857174,
+      "p99Ms": 0.001925751578046432,
+      "samples": 49,
+      "repeats": 9347
+    },
+    {
+      "name": "bench/large.bench.ts > parse: large documents > large-1mb (single) (throws)",
+      "hz": 570780.6691449813,
+      "rme": 0.42240603948982236,
+      "avgMs": 0.0017519864530415527,
+      "minMs": 0.0016412661195779601,
+      "maxMs": 0.0017584994138335288,
+      "p50Ms": 0.0017584994138335288,
+      "p99Ms": 0.0017584994138335288,
+      "samples": 54,
+      "repeats": 8530
+    },
+    {
+      "name": "bench/large.bench.ts > parse: large documents > large-5mb (single) (throws)",
+      "hz": 597922.8486646884,
+      "rme": 0.7981868905530215,
+      "avgMs": 0.001672456575682382,
+      "minMs": 0.0016129032258064516,
+      "maxMs": 0.0017204301075268817,
+      "p50Ms": 0.0017204301075268817,
+      "p99Ms": 0.0017204301075268817,
+      "samples": 65,
+      "repeats": 9300
+    },
+    {
+      "name": "bench/many.bench.ts > parse: many small docs (burst) > 50x ~2KB burst (throws)",
+      "hz": 10070.991432068544,
+      "rme": 0.820696416243755,
+      "avgMs": 0.09929508993680115,
+      "minMs": 0.0962566844919786,
+      "maxMs": 0.10160427807486631,
+      "p50Ms": 0.10160427807486631,
+      "p99Ms": 0.10160427807486631,
+      "samples": 44,
+      "repeats": 187
+    },
+    {
+      "name": "bench/small.bench.ts > parse: small shapes > tiny rss (throws)",
+      "hz": 571076.9230769231,
+      "rme": 1.0194046491265674,
+      "avgMs": 0.0017510775862068966,
+      "minMs": 0.0016578249336870027,
+      "maxMs": 0.001878868258178603,
+      "p50Ms": 0.0017683465959328027,
+      "p99Ms": 0.001878868258178603,
+      "samples": 32,
+      "repeats": 9048
+    },
+    {
+      "name": "bench/small.bench.ts > parse: small shapes > attrs-heavy (throws)",
+      "hz": 574058.9390962672,
+      "rme": 0.3999410609037325,
+      "avgMs": 0.0017419814097386686,
+      "minMs": 0.0016290435187340006,
+      "maxMs": 0.0017454037700721434,
+      "p50Ms": 0.0017454037700721434,
+      "p99Ms": 0.0017454037700721434,
+      "samples": 34,
+      "repeats": 8594
+    },
+    {
+      "name": "bench/small.bench.ts > parse: small shapes > deep-nesting (throws)",
+      "hz": 592204.7713717694,
+      "rme": 0.96068667332719,
+      "avgMs": 0.0016886051047573008,
+      "minMs": 0.001665105630138412,
+      "maxMs": 0.0017691747320220626,
+      "p50Ms": 0.001665105630138412,
+      "p99Ms": 0.0017691747320220626,
+      "samples": 31,
+      "repeats": 9609
+    },
+    {
+      "name": "bench/small.bench.ts > parse: small shapes > cdata-heavy (throws)",
+      "hz": 593178.2945736434,
+      "rme": 0.7514279426814816,
+      "avgMs": 0.0016858337689492943,
+      "minMs": 0.00167276529012023,
+      "maxMs": 0.0017773131207527444,
+      "p50Ms": 0.00167276529012023,
+      "p99Ms": 0.0017773131207527444,
+      "samples": 32,
+      "repeats": 9565
+    }
+  ]
+}
