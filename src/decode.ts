@@ -13,6 +13,8 @@ import { XmlError } from "./errors.js";
  *   throw XmlError. Offsets in later errors refer to the decoded string.
  */
 const decoders = new Map<string, TextDecoder>();
+/** The EncodingDecl inside an XML declaration (§4.3.3 [80]). */
+const ENCODING_RE = /^<\?xml\s[^>]*?\sencoding\s*=\s*(["'])([A-Za-z][\w.-]*)\1/;
 
 function decoderFor(label: string): TextDecoder {
   let decoder = decoders.get(label);
@@ -43,12 +45,12 @@ function declaredEncoding(bytes: Uint8Array): string | undefined {
   }
   const end = Math.min(bytes.length, 256);
   let head = "";
-  for (let index = 5; index < end; index++) {
+  for (let index = 0; index < end; index++) {
     const byte = bytes[index] as number;
     if (byte === 0x3e || byte >= 0x80) break; // ">" ends the declaration; stay ASCII-only
     head += String.fromCodePoint(byte);
   }
-  return /\sencoding\s*=\s*(["'])([A-Za-z][\w.-]*)\1/.exec(head)?.[2];
+  return ENCODING_RE.exec(head)?.[2];
 }
 
 function sameEncoding(bomEncoding: string, declared: string): boolean {
@@ -82,10 +84,19 @@ export function decodeInput(bytes: Uint8Array): string {
     }
   }
 
+  let text: string;
   try {
-    return decoderFor(label).decode(bytes);
+    text = decoderFor(label).decode(bytes);
   } catch (error) {
     if (error instanceof XmlError) throw error;
     throw new XmlError(`invalid byte sequence for ${label}`, 0, 1, 1);
   }
+  // UTF-16 input can't be sniffed as ASCII, so its declaration is checked after decoding.
+  if (label === "utf-16le" || label === "utf-16be") {
+    const declared = ENCODING_RE.exec(text.slice(0, 256).split("?>", 1)[0] ?? "")?.[2];
+    if (declared !== undefined && !sameEncoding(label, declared)) {
+      throw new XmlError("the encoding declaration contradicts the byte order", 0, 1, 1);
+    }
+  }
+  return text;
 }

@@ -73,6 +73,10 @@ describe("bytes input", () => {
       concat([0xef, 0xbb, 0xbf], utf8('<?xml version="1.0" encoding="ISO-8859-1"?><a/>')),
     ],
     ["UTF-32 byte order mark", concat([0xff, 0xfe, 0, 0], utf8("<a/>"))],
+    [
+      "UTF-16 byte order mark with a UTF-8 declaration",
+      utf16('<?xml version="1.0" encoding="UTF-8"?><a/>', false, true),
+    ],
   ];
   for (const [label, bytes] of rejects) {
     it(`rejects: ${label}`, () => {

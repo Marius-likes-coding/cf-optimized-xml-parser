@@ -25,6 +25,14 @@ const WS_RE = /[\t\n\r]/g;
 const DECLARATION_RE =
   /^version[\t\n\r ]*=[\t\n\r ]*(["'])(1\.\d+)\1(?:[\t\n\r ]+encoding[\t\n\r ]*=[\t\n\r ]*(["'])[A-Za-z][\w.-]*\3)?(?:[\t\n\r ]+standalone[\t\n\r ]*=[\t\n\r ]*(["'])(?:yes|no)\4)?[\t\n\r ]*$/;
 const MAX_DOCTYPE = 65_536;
+/**
+ * doctypedecl up to the internal subset or ">" (§2.8 [28], [75], [12]): a Name, then an optional
+ * SYSTEM or PUBLIC identifier. Checked once per document; the internal subset is skipped.
+ */
+const DOCTYPE_HEAD_RE = new RegExp(
+  String.raw`[\t\n\r ]+(?:${NAME_RE.source})(?:[\t\n\r ]+(?:SYSTEM[\t\n\r ]+(?:"[^"]*"|'[^']*')|PUBLIC[\t\n\r ]+(?:"[-'()+,./:=?;!*#@$_%\n\r a-zA-Z0-9]*"|'[-()+,./:=?;!*#@$_%\n\r a-zA-Z0-9]*')[\t\n\r ]+(?:"[^"]*"|'[^']*')))?[\t\n\r ]*[[>]`,
+  "uy",
+);
 
 const scratch: XmlNode[] = [""];
 const attributeScratch: string[] = [""];
@@ -98,7 +106,8 @@ function skipDoctype(xml: string, start: number): number {
 function checkDeclaration(xml: string, start: number, end: number): void {
   const declaration = DECLARATION_RE.exec(xml.slice(start, end));
   if (declaration === null) fail("malformed XML declaration", xml, start);
-  if (declaration[2] !== "1.0") fail("only XML 1.0 is supported", xml, start);
+  // A 1.0 processor treats any 1.x as 1.0 (§2.8); XML 1.1 has different rules and is refused.
+  if (declaration[2] === "1.1") fail("XML 1.1 is not supported", xml, start);
 }
 
 export function parseString(
@@ -226,6 +235,8 @@ export function parseString(
       } else if (xml.startsWith("DOCTYPE", lt + 2)) {
         if (root !== null || seenDoctype) fail("DOCTYPE after the root or repeated", xml, lt);
         seenDoctype = true;
+        DOCTYPE_HEAD_RE.lastIndex = lt + 9;
+        if (!DOCTYPE_HEAD_RE.test(xml)) fail("malformed DOCTYPE", xml, lt);
         textStart = skipDoctype(xml, lt + 9);
       } else fail("unknown markup declaration", xml, lt);
       lt = xml.indexOf("<", textStart);

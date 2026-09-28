@@ -57,6 +57,9 @@ describe("well-formedness", () => {
     ["invalid character in an element name", "<a$b/>"],
     ["invalid character in an attribute name", '<a b$c="1"/>'],
     ["invalid PI target", "<a><?1x y?></a>"],
+    ["DOCTYPE without a name", '<!DOCTYPE SYSTEM "a.dtd"><a/>'],
+    ["DOCTYPE with a literal but no SYSTEM/PUBLIC", '<!DOCTYPE a "a.dtd"><a/>'],
+    ["public id with a character PubidChar forbids", '<!DOCTYPE a PUBLIC "{x}" "a.dtd"><a/>'],
   ];
   for (const [label, xml] of rejects) {
     it(`rejects: ${label}`, () => {
@@ -75,6 +78,8 @@ describe("well-formedness", () => {
     ["comment with single dashes", "<a><!-- a-b - c --></a>"],
     ["PI target that only starts with xml", "<a><?xml-stylesheet href='s'?></a>"],
     ["DOCTYPE before the root", "<!DOCTYPE a><a/>"],
+    ["DOCTYPE with a public id", `<!DOCTYPE a PUBLIC "-//X//DTD a//EN" 'a.dtd'><a/>`],
+    ["a future 1.x version, processed as 1.0", '<?xml version="1.7"?><a/>'],
   ];
   for (const [label, xml] of accepts) {
     it(`accepts: ${label}`, () => {
