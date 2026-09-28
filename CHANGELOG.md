@@ -1,3 +1,27 @@
+## [2.0.0](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/compare/v1.0.1...v2.0.0) (2026-09-28)
+
+### ⚠ BREAKING CHANGES
+
+- 1.x only published scaffolding whose parse() threw "Not implemented yet".
+  2.0.0 is the first working parser: parse(input, options?) returns an XmlDocument
+  { root, children } or throws XmlError, and the package now also exports warmup(), XmlError
+  and helper functions.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+
+### Features
+
+- accept bytes input with encoding detection ([a3410f6](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/a3410f638bc5a65e781d01a080673f6b13aadc27))
+- add warmup() to prime the parser's type feedback ([33d146e](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/33d146e9d81b8986e993d79cb9c2133829c06bae))
+- enforce well-formedness, normalize line endings and attributes, add limits ([146411f](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/146411f3cfe24c014832eed7ea459ae62fe55fb0)), closes [#13](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/issues/13) [#10](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/issues/10)
+- keep duplicate-attribute checks linear and add robustness tests and fuzzing ([f05c77d](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/f05c77d537f5cd38df908bf8ab64f314908480bc))
+- parse XML strings into a document tree ([4be4b4f](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/4be4b4fcbe0ae18b40bf1d6806cefa38539aa862))
+- release the first working parser as 2.0.0 ([9f97eea](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/9f97eeaed2ee1805161231399cd85ee0839f124a))
+
+### Bug Fixes
+
+- check the DOCTYPE head, accept XML 1.x as 1.0, reject UTF-16 declaration mismatches ([d0eed9c](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/d0eed9c98dfb815b1ee6a264bab5e0c7566136f0))
+
 ## [1.0.1](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/compare/v1.0.0...v1.0.1) (2026-09-21)
 
 ### Bug Fixes
