@@ -20,6 +20,7 @@ const KITCHEN_SINK = '<?xml version="1.0" encoding="UTF-8"?>\\r\\n<!DOCTYPE k [<
   '<k a="1" b="x &amp; &#65; &#x42;" c="t\\tu\\r\\nv"><e/><e x="1" y="2" z="3">t &lt; &gt; &quot; &apos; “q” —</e>' +
   '<f>line\\r\\nbreak<![CDATA[c <d> &]]>after</f><!-- in --><?p in?><g h="é"/>\\n  <n><m>deep</m></n></k>\\n<!-- end -->';
 for (let warm = 0; warm < ${Number(process.env.WARM ?? "0")}; warm++) strictParse(KITCHEN_SINK);
+${process.env.WARM === "src" ? `import { warmup } from ${JSON.stringify(resolve("src/index.ts"))};\nwarmup();` : ""}
 export default {
   async fetch(request) {
     const url = new URL(request.url);

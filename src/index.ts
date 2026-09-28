@@ -24,6 +24,7 @@ export type {
   XmlNode,
   XmlProcessingInstruction,
 } from "./types.js";
+export { warmup } from "./warmup.js";
 
 /** Package version (set by the release). */
 export const VERSION = "0.0.0-development";
