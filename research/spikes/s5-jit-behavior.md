@@ -63,3 +63,26 @@ Conclusions:
 - Cold parses on Cloudflare: 2–5 ms for 114–135 KB, warm 0–1 ms.
 - **New observation:** an 8–10 ms spike at parse #48 in both runs, most likely a stop-the-world major GC (workerd disables incremental marking). A candidate for the performance pass: check whether the short-lived trees get pretenured into old space.
 - Requests from one client can be spread over several isolates. Warm-up and tier-up are per isolate, so every isolate pays its own cold phase.
+
+## Remote check of the released parser (2026-09-29)
+
+`spikes/remote/final-worker.ts` with the real `parse()` from `src/`, deployed under the bench Worker's name (user-approved) with `--define WARM:0` or `WARM:1` (`warmup()` at module scope, as the README recommends); a fresh deploy per run. `spikes/remote/final-run.mjs` sends 140 requests, one parse each: rss-ascii ×40 (R), svg ×25 (S), soap ×15 (P), ooxml-cjk ×15 (O), s3-ascii as bytes ×15 (B), rss-crlf ×15 (C), entities ×15 (E). CPU per request from `wrangler tail`, whole ms. Afterwards the real bench Worker was redeployed.
+
+`wrangler tail` now samples bursts: after about 20 events in a second or two, only a few more arrive. The runner therefore sends one request per second (`PACE_MS`), which spreads requests over more isolates.
+
+**No warm-up** (10 isolates; the longest timeline, 57 parses):
+
+```
+R1:4 R2:1 R3:3 R4–7:1 R8:3 R9–12:0 | S13:7 S14:4 S15–17:1–2 S18:27 | P23–31:0–1 | O32:3 O33:5 O34–36:1
+B37:36 B38–43:0 | C44:3 C45:4 C46–50:0 | E51:3 E52–53:1 E54:34 E55–57:0–1
+```
+
+Three recompiles of 27–36 ms, each on or just after a change of document shape; parse #1 averaged 2.8 ms over 9 isolates.
+
+**`warmup()` from 2.0.0** (one isolate, 140 parses): R1:1 R2:4 **R10:17** (top tier, once), svg, soap, ooxml-cjk and entities 0–2 ms with no spike, B98:9, but **C112:6 … C121:24**: the CRLF feed still deoptimized.
+
+**Cause**, from a local `--trace-deopt` of the same sequence: "Insufficient type feedback for call" in `parseString` at the `indexOf("\r")` refresh of the PI branch. In the warm-up documents every PI came after the memoized `\r` position had already moved past it, so that call never ran; the rss-crlf fixture has a stylesheet PI after a line break the parser had already passed. V8 block coverage of parsing both warm-up documents found three more code paths that need feedback and never ran: whitespace around `=` in attributes, the attribute path's `indexOf("&")` refresh (an `&` in a comment or CDATA followed by an attribute), and a PI target followed by a line break. The warm-up documents now cover all four; coverage leaves only error paths and plain assignments unrun.
+
+**Extended warm-up** (one isolate, 140 parses): R1:2 R2:6 **R10:42** (top tier, once) · **B98:14** (`decodeEntities` reaching the top tier, once; the local trace shows the same compile at the third bytes parse) · every other parse 0–1 ms (one 5), **no deopt at any shape change**. The local trace of the same sequence shows no deopt at all.
+
+Worker startup time reported by `wrangler deploy`: 1 ms without the warm-up, 3 ms with the 2.0.0 warm-up, 4 ms with the extended one. The first request in an isolate cost 1–2 ms with the warm-up against 2.8 ms on average without, so the warm-up runs at startup and isn't counted in the first request's CPU time.
