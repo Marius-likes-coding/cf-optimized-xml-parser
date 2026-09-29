@@ -26,8 +26,11 @@ export type {
 } from "./types.js";
 export { warmup } from "./warmup.js";
 
-/** Package version (set by the release). */
-export const VERSION = "0.0.0-development";
+/** Replaced with package.json's version by the build (tsdown.config.ts). */
+declare const __VERSION__: string | undefined;
+
+/** Package version, for example "2.0.1"; "0.0.0-development" when the sources run unbuilt. */
+export const VERSION: string = typeof __VERSION__ === "string" ? __VERSION__ : "0.0.0-development";
 
 function limit(value: number | undefined, fallback: number, name: string): number {
   if (value === undefined) return fallback;
