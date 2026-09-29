@@ -57,6 +57,8 @@ describe("warmup", () => {
           children: "line\nbreak & morec <d> &after éé😀",
         },
         { name: "h", attrs: null, children: "first" },
+        { name: "#comment", attrs: null, children: " & " },
+        { name: "v", attrs: ["p", "q"], children: null },
         { name: "#comment", attrs: null, children: " in " },
         { name: "?p", attrs: null, children: "in\ndata" },
         {
