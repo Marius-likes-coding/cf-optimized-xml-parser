@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/compare/v2.0.0...v2.0.1) (2026-09-29)
+
+### Bug Fixes
+
+- report the published package version in VERSION ([acb6690](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/acb6690e385ae250e8007c42aebdb751038f9731))
+- **warmup:** cover the parser paths that still deoptimized after warmup() ([c4bae31](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/commit/c4bae314541e43c53ce7c9e2152138831b3a7f87))
+
 ## [2.0.0](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/compare/v1.0.1...v2.0.0) (2026-09-28)
 
 ### ⚠ BREAKING CHANGES
