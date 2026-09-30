@@ -3,11 +3,11 @@ name: perf
 # the same Workers (Cloudflare), so machine drift and hardware differences hit both alike.
 # perf-local gates (a required check on main); perf-remote reports only (bench/README.md).
 # Base: the base branch tip for pull requests and pushes, the latest release for scheduled runs.
-# Thresholds and fixtures: bench/gates.json. Details: bench/README.md.
+# Thresholds, fixtures and shards: bench/gates.json. Details: bench/README.md.
 on:
   pull_request:
-    # labeled/unlabeled: the perf-regression-accepted label changes the verdict. Every label
-    # change reruns the checks, because a skipped rerun would count as a pass for the commit.
+    # labeled/unlabeled: the perf-regression-accepted and perf-remote labels change the run.
+    # Every label change reruns the checks, because a skipped rerun would count as a pass.
     types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
@@ -32,28 +32,112 @@ env:
   PERF_REGRESSION_ACCEPTED: ${{ contains(github.event.pull_request.labels.*.name, 'perf-regression-accepted') }}
 
 jobs:
-  perf-local:
+  # What this run measures. bench: false when the change touches nothing the benchmarks measure
+  # (docs, research, tests), so such pull requests pass in seconds. remote: on pull requests only
+  # with the perf-remote label. shards: one runner per share of the fixtures.
+  scope:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 5
+    outputs:
+      bench: ${{ steps.scope.outputs.bench }}
+      remote: ${{ steps.scope.outputs.remote }}
+      shards: ${{ steps.scope.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          REMOTE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'perf-remote') }}
+        run: |
+          # HEAD^1: the base branch tip (pull_request checks out the merge commit) or the previous
+          # main commit (push), as in scripts/bench-lib.mjs resolveBase().
+          measured="src scripts bench/gates.json package.json package-lock.json mise.toml tsconfig.json .github/workflows/perf.yml .github/actions"
+          if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ] || ! git diff --quiet HEAD^1 HEAD -- $measured; then
+            bench=true
+          else
+            bench=false
+          fi
+          remote=false
+          if [ "$bench" = true ] && { [ "$EVENT" != pull_request ] || [ "$REMOTE_LABEL" = true ]; }; then
+            remote=true
+          fi
+          {
+            echo "bench=$bench"
+            echo "remote=$remote"
+            echo "shards=$(jq -c '[range(1; .local.shards + 1)]' bench/gates.json)"
+          } >> "$GITHUB_OUTPUT"
+          echo "bench=$bench remote=$remote"
+
+  perf-local-shard:
+    needs: scope
+    if: needs.scope.outputs.bench == 'true'
+    name: perf-local shard ${{ matrix.shard }}/${{ strategy.job-total }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.scope.outputs.shards) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: jdx/mise-action@v2
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup
       - run: npm run bench:pr
+        env:
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
       - uses: actions/upload-artifact@v5
         if: always()
+        with:
+          name: shard-local-${{ matrix.shard }}
+          path: bench/results/perf-local.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The required check: merges the shards' reports and applies the gate. Always runs, so a
+  # skipped or failed shard can't count as a pass.
+  perf-local:
+    needs: [scope, perf-local-shard]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - env:
+          SCOPE: ${{ needs.scope.result }}
+          BENCH: ${{ needs.scope.outputs.bench }}
+        run: |
+          if [ "$SCOPE" != success ]; then
+            echo "The scope job ended with '$SCOPE'."
+            exit 1
+          fi
+          if [ "$BENCH" != true ]; then
+            echo "Skipped: this change touches nothing the benchmarks measure." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/checkout@v6
+        if: needs.scope.outputs.bench == 'true'
+      - uses: jdx/mise-action@v2
+        if: needs.scope.outputs.bench == 'true'
+      # A missing shard report fails the merge below, not this step.
+      - uses: actions/download-artifact@v5
+        if: needs.scope.outputs.bench == 'true'
+        continue-on-error: true
+        with:
+          pattern: shard-local-*
+          path: bench/results/shards
+      - if: needs.scope.outputs.bench == 'true'
+        run: node scripts/bench-merge.mjs bench/results/shards/*/perf-local.json
+      - uses: actions/upload-artifact@v5
+        if: always() && needs.scope.outputs.bench == 'true'
         with:
           name: perf-local
           path: bench/results/perf-local.json
           if-no-files-found: ignore
 
   perf-remote:
+    needs: scope
+    if: needs.scope.outputs.remote == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -76,15 +160,8 @@ jobs:
         if: steps.token.outputs.skipped == 'false'
         with:
           fetch-depth: 0
-      - uses: jdx/mise-action@v2
+      - uses: ./.github/actions/setup
         if: steps.token.outputs.skipped == 'false'
-      - uses: actions/setup-node@v6
-        if: steps.token.outputs.skipped == 'false'
-        with:
-          node-version: 24
-          cache: npm
-      - if: steps.token.outputs.skipped == 'false'
-        run: npm ci
       - if: steps.token.outputs.skipped == 'false'
         run: npm run bench:pr:remote
       # The script deletes its Workers; this covers a cancelled or killed run.
@@ -104,7 +181,7 @@ jobs:
 
   perf-report:
     if: always() && github.event_name == 'pull_request'
-    needs: [perf-local, perf-remote]
+    needs: [scope, perf-local, perf-remote]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -124,6 +201,8 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           LOCAL_RESULT: ${{ needs.perf-local.result }}
           REMOTE_RESULT: ${{ needs.perf-remote.result }}
+          BENCH: ${{ needs.scope.outputs.bench }}
+          REMOTE: ${{ needs.scope.outputs.remote }}
           REMOTE_SKIPPED: ${{ needs.perf-remote.outputs.skipped }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 

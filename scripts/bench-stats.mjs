@@ -158,7 +158,7 @@ const pct = (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 
 const METRIC_TITLES = {
   "total-100": "Cold: total of the first 100 parses in a fresh isolate (one parse per request)",
-  warm: "Warm: time per parse after tier-up (4 isolates, both copy orders)",
+  warm: "Warm: time per parse after tier-up (several isolates, both copy orders, random order)",
   memory: "Retained tree (lab measurement, not gated)",
   "remote-warm": "Warm: CPU per parse on Cloudflare (tail cpuTime, several fresh Workers)",
 };

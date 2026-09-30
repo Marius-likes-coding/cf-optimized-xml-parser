@@ -5,6 +5,8 @@
  *
  * Usage: node scripts/bench-report.mjs [--comment]
  *   env: LOCAL_RESULT, REMOTE_RESULT (the jobs' results, for a missing report),
+ *        BENCH ("false" when the change touches nothing the benchmarks measure),
+ *        REMOTE ("false" when the remote check wasn't requested: no `perf-remote` label),
  *        REMOTE_SKIPPED ("true" when the remote job had no Cloudflare token), RUN_URL;
  *        with --comment: GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER
  */
@@ -21,21 +23,33 @@ function section(report, label, result, skippedNote) {
   return `### ${label}\n\nNo result: the job ended with \`${result ?? "unknown"}\`. See the run log.`;
 }
 
+const benchSkipped = process.env.BENCH === "false";
 const local = load("bench/results/perf-local.json");
 const remote = load("bench/results/perf-remote.json");
 const body = [
   MARKER,
   "## Performance: base vs this PR",
   "",
-  section(local, "Local", process.env.LOCAL_RESULT),
+  section(
+    local,
+    "Local",
+    process.env.LOCAL_RESULT,
+    benchSkipped
+      ? "Skipped: this pull request changes nothing the benchmarks measure (parser, bench scripts, gates, dependencies, the perf workflow)."
+      : undefined,
+  ),
   "",
   section(
     remote,
     "Remote",
     process.env.REMOTE_RESULT,
-    process.env.REMOTE_SKIPPED === "true"
-      ? "Skipped: no Cloudflare token (pull requests from forks and Dependabot get no secrets)."
-      : undefined,
+    benchSkipped
+      ? "Skipped, like the local check."
+      : process.env.REMOTE_SKIPPED === "true"
+        ? "Skipped: no Cloudflare token (pull requests from forks and Dependabot get no secrets)."
+        : process.env.REMOTE === "false"
+          ? "Not requested: add the `perf-remote` label to measure on Cloudflare (report only; it missed a 14% slowdown in calibration, see bench/README.md)."
+          : undefined,
   ),
   "",
   `<sub>Gate: local ≥ 5% (cold, warm) when the change is significant; override with the label \`perf-regression-accepted\`. The Cloudflare comparison is report-only. ${process.env.RUN_URL ? `[Run](${process.env.RUN_URL})` : ""}</sub>`,
