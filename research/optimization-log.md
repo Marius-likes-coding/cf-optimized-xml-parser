@@ -78,3 +78,43 @@ Rejected in the M7 performance pass (2026-09-29, workerd 1.20260815.1, V8 15.1);
   ships a cheaper Unicode-class match — or if the s3-cold compile sensitivity is understood and
   isolated first (ablate: dead-code-only candidate of the same bytecode size; if s3 still
   regresses, the gate cannot see past compile noise for changes of this size).
+
+### 2026-09-30: Split numeric-reference branch out of decodeEntities (failed)
+
+- **Hypothesis:** `decodeEntities`' numeric-reference branch (digit loop, range checks,
+  `isXmlChar`) bloats the entity decoder and its one-time top-tier compile (the 8–10 ms spike
+  at parse #48, 14 ms in the extended warm-up run). Outlining it into `decodeNumeric()` shrinks
+  `decodeEntities`, cutting total-100 compile cost on entity-heavy fixtures (entities, sitemap,
+  soap/rss with entities) while leaving entity-free fixtures neutral. `parseString` bytecode is
+  untouched, so the s3-cold compile sensitivity from the 2026-09-30 attribute-names entry should
+  not trigger.
+- **Change:** `src/entities.ts` only: numeric `&#...;`/`&#x...;` parsing moved verbatim into a
+  new `decodeNumeric(source, amp, semi)` helper; `decodeEntities` calls it on the `#` branch.
+  Error messages, offsets and accept/reject behavior identical. No `src/warmup.ts` change: the
+  warm-up documents already exercise decimal, hex and named references. Reverted; only this log
+  ships.
+- **Measured:** base `a82bf1d` → candidate `a82bf1d`+dirty (uncommitted); workerd 1.20260815.1.
+  Full `npm run bench:pr` (60 cold isolates, 12 warm isolates):
+  cold total-100: rss-ascii −4.6% ⚪ (−11.5…+2.1), rss-poison +1.1% ⚪, rss-small +7.1% 🟡
+  inconclusive, rss-crlf +0.1% ⚪, svg +0.7% ⚪, soap −0.4% ⚪, s3-ascii +3.1% 🟡 slower
+  (+1.4…+4.5), ooxml-ascii −0.3% ⚪, sitemap −0.6% ⚪, entities +1.0% ⚪;
+  warm: all ⚪ same (rss-ascii −0.5%, rss-poison −0.1%, rss-small +0.1%, rss-crlf −0.3%,
+  svg −0.3%, soap −1.2%, s3-ascii −1.7%, ooxml-ascii −0.9%, sitemap −1.6%, entities +0.1%,
+  all below the 5% gate);
+  memory: no change except rss-ascii −2.2% (baseline offset noise, same as the previous entry).
+  Quick round (`entities,sitemap,s3-ascii`, 10 isolates) agreed: cold all ⚪ same (entities +4.5%,
+  sitemap −0.7%, s3-ascii +2.2%), warm all ⚪ same (+1.1…+1.2%).
+  Encoding/bytes checks not run (failed locally; `src/decode.ts` untouched).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the compile saving never materialized: no total-100 row is 🟢, and s3-ascii cold is
+  🟡 slower (+3.1% with CI fully above 0). Warm is a wash (quick round +1%, full run −1% — both
+  noise around an extra call per numeric reference that V8 likely inlines back at the top tier
+  while it still costs in the early tiers). Notably, s3-ascii cold regressed although
+  `parseString` is byte-identical — the only delta is one extra module-level function — which
+  corroborates the previous entry's compile-noise hypothesis: s3-cold moves on any module-shape
+  change, so the gate cannot resolve changes of this size there.
+- **Retry if:** someone shows via `--trace-opt` that `decodeEntities`' compile actually dominates
+  an entity-heavy fixture's total-100 and finds a split with zero extra call on the hot path
+  (e.g. outlining only the cold `fail()` throws, not the digit loop), or the s3-cold compile
+  sensitivity is isolated first (dead-code-only ablation of the same function count; if s3 still
+  regresses, the gate cannot see past compile noise for changes of this size).
