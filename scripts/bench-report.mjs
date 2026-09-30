@@ -10,7 +10,7 @@
  */
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 
-import { renderReport } from "./bench-lib.mjs";
+import { renderReport } from "./bench-stats.mjs";
 
 const MARKER = "<!-- perf-report -->";
 const load = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined);

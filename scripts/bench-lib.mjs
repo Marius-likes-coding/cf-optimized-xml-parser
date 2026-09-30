@@ -20,10 +20,9 @@ import { resolve } from "node:path";
 import { PROD_FLAGS, PROFILES } from "./v8-profiles.mjs";
 import { bundleWorker, inspect, startWorkerd } from "./workerd-run.mjs";
 
+export * from "./bench-stats.mjs";
+
 export const COMPATIBILITY_DATE = "2026-08-01";
-export const GATES = JSON.parse(
-  readFileSync(new URL("../bench/gates.json", import.meta.url), "utf8"),
-);
 const BASE_DIR = ".bench/base";
 const FIXTURES_MODULE = resolve("src/bench-fixtures.ts");
 
@@ -179,13 +178,6 @@ async function run(worker, query) {
   const text = await response.text();
   if (!response.ok) throw new Error(`/run ${response.status}: ${text.slice(0, 200)}`);
   return JSON.parse(text);
-}
-
-export const mean = (values) => values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
-export function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = sorted.length >> 1;
-  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
 /**
@@ -347,167 +339,6 @@ export default {
     await mf.dispose();
   }
   return results;
-}
-
-/** Deterministic PRNG, so a report's confidence intervals (and the remote order) are reproducible. */
-export function mulberry32(seed) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d_2b_79_f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
-  };
-}
-
-/**
- * Percentile-bootstrap interval of `statistic(groups)` at `CONFIDENCE`. Each group is resampled
- * on its own (a group of pairs keeps its pairs together). 99%, because one run gates about 20
- * rows: at 95%, noise alone would trip one of them too often.
- */
-export const CONFIDENCE = 0.99;
-export function bootstrap(groups, statistic, iterations = 4000, seed = 20_260_929) {
-  const random = mulberry32(seed);
-  const values = [];
-  for (let iteration = 0; iteration < iterations; iteration++) {
-    const resampled = groups.map((group) =>
-      group.map(() => group[Math.floor(random() * group.length)]),
-    );
-    values.push(statistic(resampled));
-  }
-  values.sort((a, b) => a - b);
-  const tail = (1 - CONFIDENCE) / 2;
-  return [values[Math.floor(tail * iterations)], values[Math.ceil((1 - tail) * iterations) - 1]];
-}
-
-/** Change of the candidate against the base in % (positive = slower or larger), with its CI. */
-export function change(groups, ratio) {
-  const point = ratio(groups);
-  const [low, high] = bootstrap(groups, ratio);
-  return { changePct: (point - 1) * 100, lowPct: (low - 1) * 100, highPct: (high - 1) * 100 };
-}
-
-/** Mean without the lowest and highest `share` of the values (robust to outlier isolates). */
-export function trimmedMean(values, share = 0.2) {
-  const sorted = [...values].sort((a, b) => a - b);
-  const cut = Math.floor(sorted.length * share);
-  return mean(sorted.slice(cut, sorted.length - cut));
-}
-/** Unpaired: ratio of trimmed means (cold totals, one value per isolate). */
-export const ratioOfTrimmedMeans = ([base, cand]) => trimmedMean(cand) / trimmedMean(base);
-/** Paired: trimmed mean of per-round ratios (warm bursts; each element is [base, cand]). */
-export const pairedTrimmedRatio = ([pairs]) =>
-  trimmedMean(pairs.map(([base, cand]) => cand / base));
-
-export const STATUS = {
-  regression: "🔴 regression",
-  accepted: "🔴 accepted",
-  inconclusive: "🟡 inconclusive",
-  slower: "🟡 slower",
-  faster: "🟢 faster",
-  same: "⚪ same",
-};
-
-/**
- * A regression needs both: a change at or above the threshold, and a CI that excludes 0 (so
- * noise alone can't trip the gate). Over the threshold but not significant is "inconclusive";
- * significant and at least half the threshold is "slower"; "faster" mirrors the regression rule.
- * Smaller significant changes show as "same": A/A runs produce those from clock quantization.
- */
-export function classify({ changePct, lowPct, highPct }, thresholdPct) {
-  if (lowPct > 0 && changePct >= thresholdPct) return "regression";
-  if (highPct < 0 && changePct <= -thresholdPct) return "faster";
-  if (changePct >= thresholdPct) return "inconclusive";
-  if (lowPct > 0 && changePct >= thresholdPct / 2) return "slower";
-  return "same";
-}
-
-/** Builds a report row and applies the gate. */
-export function row({ metric, fixture, unit, base, cand, stats, thresholdPct, gated }) {
-  return {
-    metric,
-    fixture,
-    unit,
-    base,
-    cand,
-    ...stats,
-    thresholdPct,
-    gated,
-    status: classify(stats, thresholdPct),
-  };
-}
-
-/** Marks gated regressions as accepted when the PR carries the override label. */
-export function finalize(report) {
-  const accepted = process.env.PERF_REGRESSION_ACCEPTED === "true";
-  const regressions = report.rows.filter((r) => r.gated && r.status === "regression");
-  if (accepted) for (const r of regressions) r.status = "accepted";
-  return { ...report, accepted, regressions: regressions.length };
-}
-
-const fmt = (value, unit) =>
-  unit === "KB" || value >= 100
-    ? value.toFixed(0)
-    : value >= 10
-      ? value.toFixed(1)
-      : value.toFixed(2);
-const pct = (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
-
-const METRIC_TITLES = {
-  "total-100": "Cold: total of the first 100 parses in a fresh isolate (one parse per request)",
-  warm: "Warm: time per parse after tier-up",
-  memory: "Retained tree (lab measurement, not gated)",
-  "remote-warm": "Warm: CPU per parse on Cloudflare (tail cpuTime, several fresh Workers)",
-};
-
-/** Markdown for one report (local or remote). */
-export function renderReport(report) {
-  const where =
-    report.kind === "local"
-      ? `Local workerd ${report.workerd}, production JIT flags only`
-      : `Cloudflare Worker \`${report.worker}\``;
-  const lines = [
-    `### ${report.kind === "local" ? "Local" : "Remote"}: base \`${report.base.sha}\` → candidate \`${report.candidate.sha}\``,
-    "",
-    `${where} · bench Worker \`${report.bundleHash}\` · regression = change ≥ threshold and ${CONFIDENCE * 100}% CI above 0`,
-  ];
-  for (const metric of Object.keys(METRIC_TITLES)) {
-    const rows = report.rows.filter((r) => r.metric === metric);
-    if (rows.length === 0) continue;
-    const gate = rows[0].gated
-      ? `gate ${rows[0].thresholdPct}%`
-      : rows[0].lowPct === undefined
-        ? "information only"
-        : "report only, not a gate";
-    const detail = rows.some((r) => r.detail !== undefined);
-    lines.push(
-      "",
-      `**${METRIC_TITLES[metric]}** (${rows[0].unit}, ${gate})`,
-      "",
-      `| fixture | base | candidate | change | ${CONFIDENCE * 100}% CI | status |${detail ? " per Worker |" : ""}`,
-      `|---|---:|---:|---:|---|---|${detail ? "---|" : ""}`,
-    );
-    for (const r of rows) {
-      const ci = r.lowPct === undefined ? "" : `${pct(r.lowPct)} … ${pct(r.highPct)}`;
-      const status = r.lowPct === undefined ? "" : STATUS[r.status];
-      lines.push(
-        `| ${r.fixture} | ${fmt(r.base, r.unit)} | ${fmt(r.cand, r.unit)} | ${pct(r.changePct)} | ${ci} | ${status} |${detail ? ` ${r.detail ?? ""} |` : ""}`,
-      );
-    }
-  }
-  if (report.notes?.length) lines.push("", ...report.notes.map((note) => `> ${note}`));
-  lines.push(
-    "",
-    !report.rows.some((r) => r.gated)
-      ? "Report only: this check never fails on performance."
-      : report.regressions === 0
-        ? "No gated regressions."
-        : report.accepted
-          ? `${report.regressions} gated regression(s), accepted by the \`perf-regression-accepted\` label.`
-          : `**${report.regressions} gated regression(s).** Fix them, or add the \`perf-regression-accepted\` label if the slowdown is intended.`,
-  );
-  return lines.join("\n");
 }
 
 /** The workerd version the local runs use (the one Miniflare resolves). */
