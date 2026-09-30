@@ -10,3 +10,5 @@ bench/results/tiers-*.json
 spikes/
 research/
 .cache/
+.bench/
+bench/results/perf-*.json

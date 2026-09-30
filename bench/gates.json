@@ -1,0 +1,43 @@
+{
+  "local": {
+    "fixtures": [
+      "rss-ascii",
+      "rss-poison",
+      "rss-small",
+      "rss-crlf",
+      "svg",
+      "soap",
+      "s3-ascii",
+      "ooxml-ascii",
+      "sitemap",
+      "entities"
+    ],
+    "cold": {
+      "thresholdPct": 5,
+      "isolates": 30,
+      "parses": 100
+    },
+    "warm": {
+      "thresholdPct": 5,
+      "rounds": 20,
+      "burstMs": 100
+    },
+    "memory": {
+      "report": true
+    }
+  },
+  "remote": {
+    "report": "Report only: never fails the check (see bench/README.md).",
+    "fixtures": ["rss-ascii", "svg", "soap", "s3-ascii", "ooxml-ascii"],
+    "workers": 4,
+    "warm": {
+      "thresholdPct": 10,
+      "rounds": 15,
+      "emptySamples": 8,
+      "targetMs": 6,
+      "warmParses": 40,
+      "warmupCount": 4,
+      "paceMs": 1050
+    }
+  }
+}

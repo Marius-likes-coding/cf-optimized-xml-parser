@@ -1,0 +1,166 @@
+name: perf
+# Paired benchmarks: base and candidate run interleaved in the same process (local workerd) or
+# the same Workers (Cloudflare), so machine drift and hardware differences hit both alike.
+# perf-local gates (a required check on main); perf-remote reports only (bench/README.md).
+# Base: the base branch tip for pull requests and pushes, the latest release for scheduled runs.
+# Thresholds and fixtures: bench/gates.json. Details: bench/README.md.
+on:
+  pull_request:
+    # labeled/unlabeled: the perf-regression-accepted label changes the verdict. Every label
+    # change reruns the checks, because a skipped rerun would count as a pass for the commit.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Base ref (empty: latest release tag; HEAD: an A/A run for calibration)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  BASE: ${{ inputs.base }}
+  PERF_REGRESSION_ACCEPTED: ${{ contains(github.event.pull_request.labels.*.name, 'perf-regression-accepted') }}
+
+jobs:
+  perf-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run bench:pr
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: perf-local
+          path: bench/results/perf-local.json
+          if-no-files-found: ignore
+
+  perf-remote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: d1614c307ac7e99df62e04fe6b3f6933
+      BENCH_WORKER_NAME: cfxp-bench-${{ github.run_id }}-${{ github.run_attempt }}
+    outputs:
+      skipped: ${{ steps.token.outputs.skipped }}
+    steps:
+      # Pull requests from forks and Dependabot get no secrets: report and pass instead of failing.
+      - id: token
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            echo "Remote bench skipped: no Cloudflare token (fork or Dependabot pull request)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skipped=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v6
+        if: steps.token.outputs.skipped == 'false'
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v2
+        if: steps.token.outputs.skipped == 'false'
+      - uses: actions/setup-node@v6
+        if: steps.token.outputs.skipped == 'false'
+        with:
+          node-version: 24
+          cache: npm
+      - if: steps.token.outputs.skipped == 'false'
+        run: npm ci
+      - if: steps.token.outputs.skipped == 'false'
+        run: npm run bench:pr:remote
+      # The script deletes its Workers; this covers a cancelled or killed run.
+      - if: always() && steps.token.outputs.skipped == 'false'
+        run: |
+          mkdir -p .bench && cd .bench
+          workers=$(node -p 'require("../bench/gates.json").remote.workers')
+          for index in $(seq 0 $((workers - 1))); do
+            ../node_modules/.bin/wrangler delete --name "$BENCH_WORKER_NAME-w$index" --force >/dev/null 2>&1 || true
+          done
+      - uses: actions/upload-artifact@v5
+        if: always() && steps.token.outputs.skipped == 'false'
+        with:
+          name: perf-remote
+          path: bench/results/perf-remote.json
+          if-no-files-found: ignore
+
+  perf-report:
+    if: always() && github.event_name == 'pull_request'
+    needs: [perf-local, perf-remote]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v2
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          pattern: perf-*
+          merge-multiple: true
+          path: bench/results
+      - run: node scripts/bench-report.mjs --comment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LOCAL_RESULT: ${{ needs.perf-local.result }}
+          REMOTE_RESULT: ${{ needs.perf-remote.result }}
+          REMOTE_SKIPPED: ${{ needs.perf-remote.outputs.skipped }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  # Separate job, so only this step gets write access. Records main's and the nightly's numbers
+  # even when a comparison flagged a regression, so the history shows it.
+  record-history:
+    if: >-
+      ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    needs: [perf-local, perf-remote]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v2
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          pattern: perf-*
+          merge-multiple: true
+          path: bench/results
+      - run: |
+          if [ -f bench/results/perf-local.json ]; then
+            node scripts/bench-record.mjs bench/results/perf-local.json local
+          fi
+          if [ -f bench/results/perf-remote.json ]; then
+            node scripts/bench-record.mjs bench/results/perf-remote.json remote
+          fi
+
+  # Deletes per-run bench Workers that a dead run left behind.
+  sweep-workers:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v2
+      - run: node scripts/bench-sweep.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: d1614c307ac7e99df62e04fe6b3f6933

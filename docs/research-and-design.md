@@ -486,60 +486,56 @@ Thus, for a Worker that parses documents of different types, the warm-up decreas
 
 ### 7.2 Does the CI run benchmarks on real Cloudflare Workers?
 
-**Short answer:** Yes, one time each night, but not for pull requests. At this time, the nightly run is not reliable.
+**Short answer:** Yes. The check `perf-remote` runs for each pull request, each push to `main` and each night. It shows the result in the pull request, but it does not block a merge.
 
-**What the nightly run does:**
+**What the check does:**
 
-- The workflow `.github/workflows/perf-remote-nightly.yml` runs each night at 02:00 UTC. You can also start it manually.
-- It builds the code of `main` and deploys the bench Worker (`src/bench-worker.ts`) to Cloudflare.
-- It measures the CPU time for each parse of 11 documents. It reads the CPU time from `wrangler tail`.
-- It records the results on the `bench-history` branch, in the `remote/` folder.
+- It puts two parsers in one bench Worker: the base and the candidate. The base is the tip of the base branch. The candidate is the pull request.
+- It deploys 4 of these Workers to Cloudflare, with new names for each run. Two Workers have the base first, and two Workers have the candidate first.
+- It sends requests to the two parsers in a random sequence. It reads the CPU time of each request from `wrangler tail`.
+- It calculates the change for each Worker, and then one change for all 4 Workers together.
+- It deletes the Workers at the end of the run.
+
+**Why the check does not block a merge:** We did 5 test runs with two equal parsers on Cloudflare. In one isolate, the two equal copies had speeds that were up to 35% different. The faster copy changed from run to run. The cause is the state of the isolate, for example the time of the compilation and the state of the garbage collection. Local workerd does not show this effect.
+
+With this noise, one isolate cannot find a change of 10%. Many more isolates would make each run too long. For this reason, the local check blocks, and the Cloudflare check only reports.
+
+**Why the nightly run failed before:** `wrangler tail` sends only approximately one event each second for each Worker. The earlier tool sent requests quickly and stopped at the first lost event. The new tool sends one request each 1.05 seconds to each Worker. If an event is lost, it sends that round again.
 
 **Limits:**
 
-- It does not run for pull requests.
-- It does not compare the results with earlier results. It does not fail when the parser becomes slower.
-- It measures the warm speed: many parses of the same document in each request. It does not measure the cold start, total-100 or the warm-up.
-- It is not reliable at this time. Of the last seven scheduled runs, only the run of 2026-09-28 passed.
-
-**Why the nightly run fails:** The run of 2026-09-29 stopped after 20 requests with the error "no tail event". Now, `wrangler tail` samples fast sequences of requests. After approximately 20 events, it sends only some of the events. The tests in section 4.6 found the same problem.
-
-The tool for the tests in section 4.6 sends one request each second, and this prevents the problem. `scripts/bench-remote.mjs` does not have this correction yet. The earlier failures had other causes, for example an earlier measurement method that did not operate.
+- Pull requests from forks and from Dependabot get no secrets. For these pull requests, the check reports "skipped".
+- The check measures the warm speed only. The local check `perf-local` measures the cold start (section 7.3).
 
 ### 7.3 Can I easily see if a pull request makes the benchmarks better or worse than `main`? Does the CI fail when the speed decreases?
 
-**Short answer:** Yes, for the local warm benchmarks. Each pull request has a comparison table with the change in percent. The CI job fails if a benchmark is more than 10% slower, and the decrease is larger than the measurement noise. The table does not include total-100, the memory or the results from Cloudflare.
+**Short answer:** Yes. Each pull request gets one comment with a table for the local check and a table for the Cloudflare check. The comment shows the change in percent and a 99% confidence interval for each document. A significant decrease of speed in the local check fails the check, and the merge is blocked.
 
-**To see the comparison:**
+**The two checks:**
 
-1. On the page of the pull request, open the "Checks" tab.
-2. In the list, select the `ci` workflow.
-3. Select "Summary".
-4. Find the table "Benchmark compare" below "bench-compare summary".
+| Check         | Where                              | Measurements                                                                              | Gate |
+| ------------- | ---------------------------------- | ----------------------------------------------------------------------------------------- | ---: |
+| `perf-local`  | Local workerd on the GitHub runner | Total CPU time of the first 100 parses in a new isolate, and the time for each warm parse |   5% |
+| `perf-remote` | 4 real Cloudflare Workers          | CPU time for each warm parse                                                              | none |
 
-**What the table shows:** The table has one row for each of the 8 benchmark cases. Each row shows the speed of `main` and of the pull request in operations per second. It also shows the change in percent and a status:
+Both checks run the base and the candidate in the same process or the same Worker, in a mixed sequence. Thus, changes of machine speed have the same effect on both.
 
-| Status          | Condition                                                        |
-| --------------- | ---------------------------------------------------------------- |
-| ⚪ same         | The change is less than 5%.                                      |
-| 🟢 faster       | The pull request is 5% or more faster.                           |
-| 🟡 warn         | The pull request is 5–10% slower.                                |
-| 🟡 within noise | The pull request is more than 10% slower, but inside the noise.  |
-| 🔴 regression   | The pull request is more than 10% slower, and outside the noise. |
+**When a check fails:** A row is a regression if two conditions are true. The change is at the threshold or more, and the 99% confidence interval is completely above 0. Thus, noise alone cannot cause a failure. In test runs with two equal parsers, no row was a regression. A parser that we made 14% slower failed in 19 of 20 local rows.
 
-The noise is the sum of the relative margins of error of the two runs. For example, in pull request #27, all 8 cases changed by −2.4% to 0%.
+**Blocked merges:** A ruleset on `main` makes the check `perf-local` necessary for a merge. If a slower parser is correct, for example because of a bug fix, add the label `perf-regression-accepted` to the pull request. The checks then run again. They show the regression, but they pass.
 
-**When the CI fails:** The job `bench-compare` fails if one or more rows have the status 🔴. The branch `main` has no branch protection. Thus, a failed job shows a red check, but it does not prevent the merge.
+**The local check is as real as possible:**
 
-**Baseline:** After each push to `main`, the job `record-history` records the results of `bench-compare` in the `local/` folder of the `bench-history` branch. A pull request uses the most recent of these records as its baseline.
+- It uses the same bench Worker as the Cloudflare check.
+- The parser gets its input through `Response.text()`, as it does after a `fetch()`.
+- It uses only the V8 settings that Cloudflare also uses in production.
+- The cold measurement sends 100 separate requests, with one parse in each request.
+- The memory measurement needs special V8 settings. For this reason, the report shows memory, but memory does not block a merge.
 
-**Limits:**
+**To do the comparison on your computer:**
 
-- The benchmarks measure the warm speed in a local workerd on a GitHub runner. They do not measure total-100, the cold start or the memory. `npm run bench:cold` and `npm run bench:memory` are manual tools.
-- The baseline comes from a different run, possibly on a different runner. On a local computer with a high load, two runs of the same code had differences of up to 20–50%. On the GitHub runners, the differences were smaller: less than 2.5% for pull request #27.
-- The table is in the summary of the job, not in a comment on the pull request.
-
-**Open task:** The implementation plan (milestone M7) has a CI gate for total-100 next to the warm gate. We did not make this gate yet.
+1. Run `npm run bench:pr` for the local comparison against `origin/main`.
+2. Run `npm run bench:pr:remote` for the comparison on Cloudflare. This command needs `wrangler login`.
 
 ## 8. Words used in this document
 

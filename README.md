@@ -174,17 +174,18 @@ npm run fixtures:generate
 npm test               # unit tests in workerd
 npm run fuzz           # mutation fuzzing
 npm run conformance    # W3C XML Conformance Test Suite
-npm run bench          # benchmarks in workerd, production JIT flags
+npm run bench:pr       # your changes vs origin/main, paired, in local workerd (the CI gate)
+npm run bench:pr:remote  # the same on a real Cloudflare Worker (needs `wrangler login`)
 npm run build
 ```
 
-`bench/README.md` covers the benchmark tooling (tier profiles, A/B, cold isolates, memory, the remote bench on Cloudflare). `docs/implementation-plan.md` is the roadmap this version was built from.
+Every pull request runs both comparisons and gets one comment with the results. A significant slowdown of 5% in the local comparison fails the check, unless the PR has the label `perf-regression-accepted`; the Cloudflare comparison is reported but doesn't block (see `bench/README.md` for why). `bench/README.md` covers the benchmark tooling (paired checks, tier profiles, A/B, cold isolates, memory). `docs/implementation-plan.md` is the roadmap this version was built from.
 
 ## Publishing (npm OIDC trusted publishing, no token)
 
 1. One-time manual publish to claim the unscoped name:
    `npm publish --access public` (as `marius-likes-coding`).
 2. At `npmjs.com/package/cf-optimized-xml-parser` → Settings → Trusted Publisher → GitHub Actions → owner/repo + `release.yml` → allow `publish`.
-3. Push conventional commits to `main` — `semantic-release` versions, changelogs, and publishes with provenance.
+3. Merge conventional commits to `main` — `semantic-release` versions, tags, publishes with provenance and writes the release notes to GitHub Releases. It commits nothing back to `main`, so the required checks apply to every change.
 
-Remote nightly perf needs repo secrets: `CLOUDFLARE_API_TOKEN` and var `BENCH_URL`.
+The perf checks need the repository secret `CLOUDFLARE_API_TOKEN` (Workers Scripts Edit, Workers Tail Read).
