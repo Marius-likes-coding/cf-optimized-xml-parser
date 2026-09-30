@@ -498,7 +498,7 @@ Thus, for a Worker that parses documents of different types, the warm-up decreas
 
 **Why the check does not block a merge:** We did 5 test runs with two equal parsers on Cloudflare. In one isolate, the two equal copies had speeds that were up to 35% different. The faster copy changed from run to run. The cause is the state of the isolate, for example the time of the compilation and the state of the garbage collection. Local workerd does not show this effect.
 
-With this noise, one isolate cannot find a change of 10%. Many more isolates would make each run too long. For this reason, the local check blocks, and the Cloudflare check only reports.
+With this noise, one isolate cannot find a change of 10%. In a test, the Cloudflare report did not show a parser that we made 14% slower. Many more isolates would make each run too long. For this reason, the local check blocks, and the Cloudflare check only reports.
 
 **Why the nightly run failed before:** `wrangler tail` sends only approximately one event each second for each Worker. The earlier tool sent requests quickly and stopped at the first lost event. The new tool sends one request each 1.05 seconds to each Worker. If an event is lost, it sends that round again.
 
@@ -520,7 +520,7 @@ With this noise, one isolate cannot find a change of 10%. Many more isolates wou
 
 Both checks run the base and the candidate in the same process or the same Worker, in a mixed sequence. Thus, changes of machine speed have the same effect on both.
 
-**When a check fails:** A row is a regression if two conditions are true. The change is at the threshold or more, and the 99% confidence interval is completely above 0. Thus, noise alone cannot cause a failure. In test runs with two equal parsers, no row was a regression. A parser that we made 14% slower failed in 19 of 20 local rows.
+**When a check fails:** A row is a regression if two conditions are true. The change is at the threshold or more, and the 99% confidence interval is completely above 0. Thus, noise alone cannot cause a failure. In test runs with two equal parsers, no row was a regression. On a GitHub runner, a parser that we made 14% slower failed in 17 of 20 local rows.
 
 **Blocked merges:** A ruleset on `main` makes the check `perf-local` necessary for a merge. If a slower parser is correct, for example because of a bug fix, add the label `perf-regression-accepted` to the pull request. The checks then run again. They show the regression, but they pass.
 

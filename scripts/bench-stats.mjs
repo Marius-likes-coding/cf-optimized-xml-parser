@@ -66,6 +66,42 @@ export const ratioOfTrimmedMeans = ([base, cand]) => trimmedMean(cand) / trimmed
 export const pairedTrimmedRatio = ([pairs]) =>
   trimmedMean(pairs.map(([base, cand]) => cand / base));
 
+/**
+ * Change across independent isolates (or Workers): each group holds one isolate's paired rounds
+ * ([base, cand] per round). The point estimate is the geometric mean of the per-isolate ratios
+ * (trimmed means of the round ratios); the interval comes from a hierarchical bootstrap that
+ * resamples isolates, then rounds within each, so it includes isolate-to-isolate variance.
+ */
+const roundRatio = (pairs) => trimmedMean(pairs.map(([base, cand]) => cand / base));
+const geometricMean = (ratios) => Math.exp(mean(ratios.map((value) => Math.log(value))));
+
+export function isolateChange(groups, iterations = 4000, seed = 20_260_930) {
+  const ratio = roundRatio;
+  const geo = geometricMean;
+  const random = mulberry32(seed);
+  const pick = (list) => list[Math.floor(random() * list.length)];
+  const values = [];
+  for (let iteration = 0; iteration < iterations; iteration++) {
+    values.push(
+      geo(
+        groups.map(() => {
+          const group = pick(groups);
+          return ratio(group.map(() => pick(group)));
+        }),
+      ),
+    );
+  }
+  values.sort((a, b) => a - b);
+  const tail = (1 - CONFIDENCE) / 2;
+  const perIsolate = groups.map((group) => ratio(group));
+  return {
+    changePct: (geo(perIsolate) - 1) * 100,
+    lowPct: (values[Math.floor(tail * iterations)] - 1) * 100,
+    highPct: (values[Math.ceil((1 - tail) * iterations) - 1] - 1) * 100,
+    perIsolatePct: perIsolate.map((value) => (value - 1) * 100),
+  };
+}
+
 export const STATUS = {
   regression: "🔴 regression",
   accepted: "🔴 accepted",
@@ -122,7 +158,7 @@ const pct = (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 
 const METRIC_TITLES = {
   "total-100": "Cold: total of the first 100 parses in a fresh isolate (one parse per request)",
-  warm: "Warm: time per parse after tier-up",
+  warm: "Warm: time per parse after tier-up (4 isolates, both copy orders)",
   memory: "Retained tree (lab measurement, not gated)",
   "remote-warm": "Warm: CPU per parse on Cloudflare (tail cpuTime, several fresh Workers)",
 };
@@ -151,7 +187,7 @@ export function renderReport(report) {
       "",
       `**${METRIC_TITLES[metric]}** (${rows[0].unit}, ${gate})`,
       "",
-      `| fixture | base | candidate | change | ${CONFIDENCE * 100}% CI | status |${detail ? " per Worker |" : ""}`,
+      `| fixture | base | candidate | change | ${CONFIDENCE * 100}% CI | status |${detail ? ` per ${report.kind === "remote" ? "Worker" : "isolate"} |` : ""}`,
       `|---|---:|---:|---:|---|---|${detail ? "---|" : ""}`,
     );
     for (const r of rows) {

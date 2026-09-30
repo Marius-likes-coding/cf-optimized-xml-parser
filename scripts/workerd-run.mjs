@@ -41,15 +41,24 @@ export async function bundleWorker(source) {
   return result.outputFiles[0].text;
 }
 
-/** Starts local workerd with one isolate per name, all running `script`, under `flags`. */
-export async function startWorkerd({ script, names = ["main"], flags = "", inspectorPort }) {
+/**
+ * Starts local workerd with one isolate per name, all running `script`, under `flags`. Pass
+ * `workers: [{ name, script }]` instead to give isolates different scripts.
+ */
+export async function startWorkerd({
+  script,
+  names = ["main"],
+  workers = names.map((name) => ({ name, script })),
+  flags = "",
+  inspectorPort,
+}) {
   // Miniflare splits on single spaces and workerd aborts on the resulting empty flag.
   process.env.MINIFLARE_WORKERD_V8_FLAGS = flags.trim().replaceAll(/\s+/g, " ");
   const options = convertV4MiniflareOptions({
-    workers: names.map((name) => ({
-      name,
+    workers: workers.map((worker) => ({
+      name: worker.name,
       modules: true,
-      script,
+      script: worker.script,
       compatibilityDate: "2026-08-01",
     })),
   });

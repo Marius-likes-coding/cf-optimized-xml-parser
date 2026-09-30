@@ -20,11 +20,11 @@ import {
   COMPATIBILITY_DATE,
   finalize,
   GATES,
+  isolateChange,
   mean,
   measureCold,
   measureMemory,
   measureWarm,
-  pairedTrimmedRatio,
   prepareBase,
   ratioOfTrimmedMeans,
   renderReport,
@@ -47,13 +47,16 @@ const variants = [
   { key: "base", path: base.path },
   { key: "cand", path: candidate.path },
 ];
-// Cold measures the first parses as a Worker without warmup() sees them; warm uses the same
-// bundle as the remote check, with each variant's warmup() at module scope.
+// Cold measures the first parses as a Worker without warmup() sees them. Warm uses the same
+// bundles as the remote check: each variant's warmup() at module scope, both copy orders.
 const cold = await buildBenchWorker(variants);
-const warmBundle = await buildBenchWorker(variants, { warmup: true });
-const hash = warmBundle.hash;
+const warmBundles = [
+  await buildBenchWorker(variants, { warmup: true }),
+  await buildBenchWorker(variants.toReversed(), { warmup: true }),
+];
+const hash = warmBundles.map((bundle) => bundle.hash).join(", ");
 console.error(
-  `base ${base.ref} (${base.sha}) → candidate ${candidate.sha}, bench Worker ${hash} (cold ${cold.hash})`,
+  `base ${base.ref} (${base.sha}) → candidate ${candidate.sha}, bench Workers ${hash} (cold ${cold.hash})`,
 );
 
 const rows = [];
@@ -92,28 +95,37 @@ if (metrics.has("cold")) {
 }
 
 if (metrics.has("warm")) {
-  console.error(`warm: ${fixtures.length} fixtures × ${rounds} rounds`);
+  console.error(
+    `warm: ${fixtures.length} fixtures × ${gates.warm.isolates} isolates × ${rounds} rounds`,
+  );
   const warm = await measureWarm({
-    script: warmBundle.script,
+    scripts: warmBundles.map((bundle) => bundle.script),
     keys: ["base", "cand"],
     fixtures,
+    isolates: gates.warm.isolates,
     rounds,
     burstMs: gates.warm.burstMs,
   });
-  for (const { fixture, samples } of warm) {
-    const pairs = samples.base.map((value, index) => [value, samples.cand[index]]);
-    rows.push(
-      row({
+  for (const { fixture, perIsolate } of warm) {
+    const groups = perIsolate.map((samples) =>
+      samples.base.map((value, index) => [value, samples.cand[index]]),
+    );
+    const { perIsolatePct, ...stats } = isolateChange(groups);
+    rows.push({
+      ...row({
         metric: "warm",
         fixture,
         unit: "µs",
-        base: trimmedMean(samples.base),
-        cand: trimmedMean(samples.cand),
-        stats: change([pairs], pairedTrimmedRatio),
+        base: mean(perIsolate.map((samples) => trimmedMean(samples.base))),
+        cand: mean(perIsolate.map((samples) => trimmedMean(samples.cand))),
+        stats,
         thresholdPct: gates.warm.thresholdPct,
         gated: true,
       }),
-    );
+      detail: perIsolatePct
+        .map((value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)}`)
+        .join(" / "),
+    });
   }
 }
 

@@ -155,7 +155,8 @@ function workerContext(name, layout) {
 
   /**
    * One paced, tagged request. A new workers.dev name propagates unevenly for a short while:
-   * Cloudflare's own HTML 404 (not the Worker's JSON 404) and 5xx answers are retried.
+   * Cloudflare's own HTML 404 (not the Worker's JSON 404), 5xx answers and network errors are
+   * retried.
    */
   ctx.request = async (path) => {
     for (let attempt = 1; ; attempt++) {
@@ -163,10 +164,21 @@ function workerContext(name, layout) {
       if (wait > 0) await sleep(wait);
       lastRequest = Date.now();
       const tag = `${runId}-${name.slice(-2)}-${sequence++}`;
-      const response = await fetch(`${ctx.url}${path}${path.includes("?") ? "&" : "?"}tag=${tag}`, {
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      });
-      const text = await response.text();
+      let response;
+      let text;
+      try {
+        response = await fetch(`${ctx.url}${path}${path.includes("?") ? "&" : "?"}tag=${tag}`, {
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+        text = await response.text();
+      } catch (error) {
+        // DNS for a new name, a reset connection or a timeout: retry like a transient answer.
+        if (attempt < 8) {
+          await sleep(3000);
+          continue;
+        }
+        throw new Error(`${name}${path}: ${error.cause?.code ?? error.message}`);
+      }
       if (response.ok) return { tag, body: JSON.parse(text) };
       const transient =
         response.status >= 500 || (response.status === 404 && !text.trimStart().startsWith("{"));

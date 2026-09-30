@@ -19,7 +19,8 @@
     },
     "warm": {
       "thresholdPct": 5,
-      "rounds": 20,
+      "isolates": 4,
+      "rounds": 10,
       "burstMs": 100
     },
     "memory": {

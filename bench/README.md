@@ -16,10 +16,10 @@ Two checks run in parallel. Both put base and candidate into **one bench Worker*
 between them, so machine drift and hardware differences hit both alike instead of being
 compared across runs.
 
-| check         | where                                                 | metrics                                                                                                 | gate        |
-| ------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------- |
-| `perf-local`  | local workerd on the runner (`npm run bench:pr`)      | cold: total of the first 100 parses in a fresh isolate; warm: time per parse after tier-up; 10 fixtures | ≥ 5%        |
-| `perf-remote` | 4 real Cloudflare Workers (`npm run bench:pr:remote`) | warm: CPU per parse, from Cloudflare's own per-request CPU time; 5 fixtures                             | report only |
+| check         | where                                                 | metrics                                                                                                                             | gate        |
+| ------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `perf-local`  | local workerd on the runner (`npm run bench:pr`)      | cold: total of the first 100 parses in 30 fresh isolates per variant; warm: time per parse after tier-up in 4 isolates; 10 fixtures | ≥ 5%        |
+| `perf-remote` | 4 real Cloudflare Workers (`npm run bench:pr:remote`) | warm: CPU per parse, from Cloudflare's own per-request CPU time; 5 fixtures                                                         | report only |
 
 A row is a **regression** only when the change reaches the threshold **and** its 99% bootstrap
 confidence interval lies above 0, so noise alone can't fail the check. Other statuses: 🟡
@@ -103,17 +103,24 @@ A/A runs (base = candidate, same parser code), 99% interval half-widths:
 | check              | typical                                       | widest                       |
 | ------------------ | --------------------------------------------- | ---------------------------- |
 | local cold         | ±3% (svg, soap, s3, ooxml, sitemap, entities) | ±10% (rss), ±20% (rss-small) |
-| local warm         | ±1–2%                                         | ±5% (rss-ascii)              |
-| remote (4 Workers) | ±25–45%                                       |                              |
+| local warm         | ±2–4%                                         | ±7% (rss-ascii)              |
+| remote (4 Workers) | ±20–45%                                       |                              |
 
-Four local A/A runs gave no false regression; a deliberate slowdown (every 7th parse done twice,
-+14%) failed 19 of 20 local rows: warm +14–18%, cold +7–13% (cold includes the one-time compile,
+**Local.** A deliberate slowdown (every 7th parse done twice, about +14%; test PR #29) failed 17
+of 20 rows on a GitHub runner: warm +11–17%, cold +4–9% (cold includes the one-time compile,
 which the extra parses don't double). rss-small's cold total is only ~7 ms, and the Worker's
 1 ms clock makes it noisy, so it catches only large regressions; its warm row is precise.
 
-In the 4-Worker A/A, the parser copy loaded second was 18–52% slower in 3 of 4 Workers; the
-fourth showed no difference. Measuring both orders cancels this in the combined number, but it
-is why the remote interval is wide.
+**Two copies in one isolate can diverge.** Even locally, the two parser copies in one isolate
+sometimes settle a few percent apart: in one GitHub run, a single-isolate warm measurement
+flagged +6% on identical code. Warm therefore uses 4 isolates, 2 per copy order, and combines
+their ratios with a hierarchical bootstrap; the "per isolate" column shows each one. In the next
+A/A run, one isolate was 4–12% off on every fixture and the combined result stayed ⚪.
+
+**Remote.** On Cloudflare the divergence is far larger (the copy loaded second was 18–52%
+slower in 3 of 4 Workers of one A/A run), and it dominates: the +14% slowdown of test PR #29 did
+not show in the remote report at all (combined −8…+1%). Read the remote table as a check for
+very large, production-only effects, not as a measurement of small changes.
 
 ## Design measurements (local workerd)
 

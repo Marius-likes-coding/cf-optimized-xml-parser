@@ -223,43 +223,61 @@ export async function measureCold({ script, keys, fixtures, isolates, parses, in
 }
 
 /**
- * Warm per-parse cost: interleaved ~burstMs bursts of every variant in one isolate, production
- * JIT flags. `warmupRounds` rounds run first and are discarded, so tier-up compiles stay out of
- * the samples. Returns µs per parse for each measured round.
+ * Warm per-parse cost, production JIT flags. Two copies of the same parser in one isolate can
+ * settle a few percent apart (their JIT and GC state differs; far more on Cloudflare), so the
+ * isolate is the unit of replication: `scripts` are bench Workers with different copy orders,
+ * `isolates` isolates alternate between them, and each measures every fixture with interleaved
+ * ~burstMs bursts. `warmupRounds` rounds run first and are discarded, so tier-up compiles stay
+ * out of the samples. Returns, per fixture, the µs per parse of each variant and round in each
+ * isolate.
  */
 export async function measureWarm({
-  script,
+  scripts,
   keys,
   fixtures,
+  isolates,
   rounds,
   burstMs,
   warmupRounds = 3,
   input = "string",
 }) {
-  const mf = await startWorkerd({ script, flags: PROD_FLAGS });
+  const workers = Array.from({ length: isolates }, (_, index) => ({
+    name: `warm${index}`,
+    script: scripts[index % scripts.length],
+  }));
+  const mf = await startWorkerd({ workers, flags: PROD_FLAGS });
   const results = [];
   try {
-    const worker = await mf.getWorker("main");
+    const handles = await Promise.all(workers.map((w) => mf.getWorker(w.name)));
     for (const fixture of fixtures) {
+      // Burst size per isolate and variant, so one burst takes about burstMs.
       const counts = [];
-      for (const key of keys) {
-        let count = 1;
-        let { ms } = await run(worker, { v: key, fixture, count, input });
-        while (ms < burstMs / 4 && count < 1_000_000) {
-          count *= 4;
-          ({ ms } = await run(worker, { v: key, fixture, count, input }));
+      for (const worker of handles) {
+        const perKey = [];
+        for (const key of keys) {
+          let count = 1;
+          let { ms } = await run(worker, { v: key, fixture, count, input });
+          while (ms < burstMs / 4 && count < 1_000_000) {
+            count *= 4;
+            ({ ms } = await run(worker, { v: key, fixture, count, input }));
+          }
+          perKey.push(Math.max(1, Math.round((count * burstMs) / Math.max(ms, 1))));
         }
-        counts.push(Math.max(1, Math.round((count * burstMs) / Math.max(ms, 1))));
+        counts.push(perKey);
       }
-      const samples = Object.fromEntries(keys.map((key) => [key, []]));
+      const perIsolate = handles.map(() => Object.fromEntries(keys.map((key) => [key, []])));
+      // Round-robin over isolates too, so machine drift hits all of them alike.
       for (let round = 0; round < warmupRounds + rounds; round++) {
-        for (let step = 0; step < keys.length; step++) {
-          const slot = (round + step) % keys.length;
-          const { ms } = await run(worker, { v: keys[slot], fixture, count: counts[slot], input });
-          if (round >= warmupRounds) samples[keys[slot]].push((ms * 1000) / counts[slot]);
+        for (const [index, worker] of handles.entries()) {
+          for (let step = 0; step < keys.length; step++) {
+            const slot = (round + step) % keys.length;
+            const count = counts[index][slot];
+            const { ms } = await run(worker, { v: keys[slot], fixture, count, input });
+            if (round >= warmupRounds) perIsolate[index][keys[slot]].push((ms * 1000) / count);
+          }
         }
       }
-      results.push({ fixture, samples });
+      results.push({ fixture, perIsolate });
     }
   } finally {
     await mf.dispose();
