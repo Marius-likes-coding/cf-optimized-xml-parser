@@ -486,7 +486,7 @@ Thus, for a Worker that parses documents of different types, the warm-up decreas
 
 ### 7.2 Does the CI run benchmarks on real Cloudflare Workers?
 
-**Short answer:** Yes. The check `perf-remote` runs for each pull request, each push to `main` and each night. It shows the result in the pull request, but it does not block a merge.
+**Short answer:** Yes. The check `perf-remote` runs for each push to `main` and each night. For a pull request, it runs only when the pull request has the label `perf-remote`. It shows the result in the pull request, but it does not block a merge.
 
 **What the check does:**
 
@@ -513,14 +513,18 @@ With this noise, one isolate cannot find a change of 10%. In a test, the Cloudfl
 
 **The two checks:**
 
-| Check         | Where                              | Measurements                                                                              | Gate |
-| ------------- | ---------------------------------- | ----------------------------------------------------------------------------------------- | ---: |
-| `perf-local`  | Local workerd on the GitHub runner | Total CPU time of the first 100 parses in a new isolate, and the time for each warm parse |   5% |
-| `perf-remote` | 4 real Cloudflare Workers          | CPU time for each warm parse                                                              | none |
+| Check         | Where                             | Measurements                                                                              | Gate |
+| ------------- | --------------------------------- | ----------------------------------------------------------------------------------------- | ---: |
+| `perf-local`  | Local workerd on 5 GitHub runners | Total CPU time of the first 100 parses in a new isolate, and the time for each warm parse |   5% |
+| `perf-remote` | 4 real Cloudflare Workers         | CPU time for each warm parse                                                              | none |
 
-Both checks run the base and the candidate in the same process or the same Worker, in a mixed sequence. Thus, changes of machine speed have the same effect on both.
+Both checks run the base and the candidate in the same process or the same Worker, in a mixed sequence. Thus, changes of machine speed have the same effect on both. The local check divides the 10 documents between 5 runners. Each runner measures the base and the candidate of its documents.
 
-**When a check fails:** A row is a regression if two conditions are true. The change is at the threshold or more, and the 99% confidence interval is completely above 0. Thus, noise alone cannot cause a failure. In test runs with two equal parsers, no row was a regression. On a GitHub runner, a parser that we made 14% slower failed in 17 of 20 local rows.
+**When the checks do not run:** If a pull request changes no file that the benchmarks measure (for example, only documentation or tests), the two checks do not run. Then `perf-local` passes in some seconds.
+
+**When a check fails:** A row is a regression if two conditions are true. The change is at the threshold or more, and the 99% confidence interval is completely above 0. On a GitHub runner, a parser that we made 14% slower failed in 17 of 20 local rows.
+
+This rule did not stop all false results. In 8 test runs with two equal parsers on GitHub runners, 2 warm rows were regressions and 3 warm rows were "faster". One false regression blocked a pull request that changed only documentation. The probable cause was the fixed sequence of the warm measurement. Now each round uses a random sequence and a random burst size, and the check uses more isolates (12 warm, 60 cold). For the data, see `bench/README.md`.
 
 **Blocked merges:** A ruleset on `main` makes the check `perf-local` necessary for a merge. If a slower parser is correct, for example because of a bug fix, add the label `perf-regression-accepted` to the pull request. The checks then run again. They show the regression, but they pass.
 

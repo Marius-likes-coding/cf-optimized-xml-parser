@@ -16,7 +16,7 @@ change, so each entry says what would have to change before the idea is worth an
 - **Measured:** base sha → candidate; workerd version (`workerd` in bench/results/perf-local.json).
   The bench:pr rows that matter (total-100, warm, memory), plus the encoding and bytes checks
   if you ran them.
-- **CI:** perf-local rows; perf-remote summary. Leave out if the idea failed locally.
+- **CI:** perf-local rows. Leave out if the idea failed locally.
 - **Why:** why it worked or failed, e.g. "rss +10%: the table lookup adds a load per character".
 - **Retry if:** what would have to change first (V8 version, surrounding code). "Never" only
   for ideas that change behavior.

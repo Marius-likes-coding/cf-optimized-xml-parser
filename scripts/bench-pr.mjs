@@ -6,12 +6,15 @@
  * reports retained memory as information. Thresholds and fixtures: bench/gates.json.
  *
  * Usage: npm run bench:pr
- *   env: BASE (ref), FIXTURES (comma list), METRICS (cold,warm,memory), ISOLATES, ROUNDS,
+ *   env: BASE (ref), FIXTURES (comma list), METRICS (cold,warm,memory), ISOLATES (cold),
+ *        WARM_ISOLATES, ROUNDS (warm), SHARD=i/n (every n-th fixture from the i-th; CI runs the
+ *        shards on parallel runners and merges them with scripts/bench-merge.mjs),
  *        PERF_REGRESSION_ACCEPTED=true (report regressions, exit 0)
  * Writes bench/results/perf-local.json; prints markdown (also to $GITHUB_STEP_SUMMARY).
  * Exits 1 on a gated regression.
  */
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpus } from "node:os";
 
 import {
   buildBenchWorker,
@@ -36,9 +39,15 @@ import {
 import { PROD_FLAGS } from "./v8-profiles.mjs";
 
 const gates = GATES.local;
-const fixtures = process.env.FIXTURES ? process.env.FIXTURES.split(",") : gates.fixtures;
+const shard = process.env.SHARD;
+const [shardIndex, shardCount] = (shard ?? "1/1").split("/").map(Number);
+if (!(shardIndex >= 1 && shardIndex <= shardCount)) throw new Error(`bad SHARD ${shard}`);
+const fixtures = (process.env.FIXTURES ? process.env.FIXTURES.split(",") : gates.fixtures).filter(
+  (_, index) => index % shardCount === shardIndex - 1,
+);
 const metrics = new Set((process.env.METRICS ?? "cold,warm,memory").split(","));
 const isolates = Number(process.env.ISOLATES ?? gates.cold.isolates);
+const warmIsolates = Number(process.env.WARM_ISOLATES ?? gates.warm.isolates);
 const rounds = Number(process.env.ROUNDS ?? gates.warm.rounds);
 
 const base = prepareBase(resolveBase());
@@ -95,16 +104,15 @@ if (metrics.has("cold")) {
 }
 
 if (metrics.has("warm")) {
-  console.error(
-    `warm: ${fixtures.length} fixtures × ${gates.warm.isolates} isolates × ${rounds} rounds`,
-  );
+  console.error(`warm: ${fixtures.length} fixtures × ${warmIsolates} isolates × ${rounds} rounds`);
   const warm = await measureWarm({
     scripts: warmBundles.map((bundle) => bundle.script),
     keys: ["base", "cand"],
     fixtures,
-    isolates: gates.warm.isolates,
+    isolates: warmIsolates,
     rounds,
     burstMs: gates.warm.burstMs,
+    jitter: gates.warm.jitter,
   });
   for (const { fixture, perIsolate } of warm) {
     const groups = perIsolate.map((samples) =>
@@ -153,6 +161,9 @@ const report = finalize({
   timestamp: new Date().toISOString(),
   base,
   candidate,
+  shard: shard ?? null,
+  fixtures,
+  cpu: cpus()[0]?.model ?? "unknown",
   bundleHash: hash,
   coldBundleHash: cold.hash,
   workerd: workerdVersion(),

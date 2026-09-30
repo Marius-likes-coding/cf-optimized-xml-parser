@@ -17,6 +17,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
+import { mulberry32 } from "./bench-stats.mjs";
 import { PROD_FLAGS, PROFILES } from "./v8-profiles.mjs";
 import { bundleWorker, inspect, startWorkerd } from "./workerd-run.mjs";
 
@@ -172,6 +173,13 @@ export async function buildBenchWorker(variants, options) {
   return { script, hash };
 }
 
+/** A copy of `list` in random order. */
+const shuffled = (list, random) =>
+  list
+    .map((value) => [random(), value])
+    .sort((a, b) => a[0] - b[0])
+    .map(([, value]) => value);
+
 /** One /run request against a local workerd Worker. */
 async function run(worker, query) {
   const response = await worker.fetch(`http://bench/run?${new URLSearchParams(query)}`);
@@ -230,6 +238,11 @@ export async function measureCold({ script, keys, fixtures, isolates, parses, in
  * ~burstMs bursts. `warmupRounds` rounds run first and are discarded, so tier-up compiles stay
  * out of the samples. Returns, per fixture, the µs per parse of each variant and round in each
  * isolate.
+ *
+ * The schedule is random: each round runs the variants in random order, and each burst's size
+ * varies by ±`jitter`. With a fixed order and fixed burst sizes, the garbage collector can fall
+ * into step with the schedule and keep charging one variant: A/A runs on GitHub runners showed
+ * per-fixture leans of 1–2% that repeated from run to run and reached ±6% in all 4 isolates.
  */
 export async function measureWarm({
   scripts,
@@ -238,6 +251,7 @@ export async function measureWarm({
   isolates,
   rounds,
   burstMs,
+  jitter = 0,
   warmupRounds = 3,
   input = "string",
 }) {
@@ -250,18 +264,21 @@ export async function measureWarm({
   try {
     const handles = await Promise.all(workers.map((w) => mf.getWorker(w.name)));
     for (const fixture of fixtures) {
+      const random = mulberry32(
+        [...fixture].reduce((hash, char) => Math.imul(hash, 31) + char.codePointAt(0), 7),
+      );
       // Burst size per isolate and variant, so one burst takes about burstMs.
       const counts = [];
       for (const worker of handles) {
-        const perKey = [];
-        for (const key of keys) {
+        const perKey = {};
+        for (const key of shuffled(keys, random)) {
           let count = 1;
           let { ms } = await run(worker, { v: key, fixture, count, input });
           while (ms < burstMs / 4 && count < 1_000_000) {
             count *= 4;
             ({ ms } = await run(worker, { v: key, fixture, count, input }));
           }
-          perKey.push(Math.max(1, Math.round((count * burstMs) / Math.max(ms, 1))));
+          perKey[key] = Math.max(1, Math.round((count * burstMs) / Math.max(ms, 1)));
         }
         counts.push(perKey);
       }
@@ -269,11 +286,11 @@ export async function measureWarm({
       // Round-robin over isolates too, so machine drift hits all of them alike.
       for (let round = 0; round < warmupRounds + rounds; round++) {
         for (const [index, worker] of handles.entries()) {
-          for (let step = 0; step < keys.length; step++) {
-            const slot = (round + step) % keys.length;
-            const count = counts[index][slot];
-            const { ms } = await run(worker, { v: keys[slot], fixture, count, input });
-            if (round >= warmupRounds) perIsolate[index][keys[slot]].push((ms * 1000) / count);
+          for (const key of shuffled(keys, random)) {
+            const scale = 1 + jitter * (2 * random() - 1);
+            const count = Math.max(1, Math.round(counts[index][key] * scale));
+            const { ms } = await run(worker, { v: key, fixture, count, input });
+            if (round >= warmupRounds) perIsolate[index][key].push((ms * 1000) / count);
           }
         }
       }

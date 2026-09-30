@@ -1,0 +1,16 @@
+name: setup
+description: >-
+  Node from mise.toml, and node_modules restored from a cache keyed on the lockfile and the Node
+  version; npm ci runs only on a cache miss.
+runs:
+  using: composite
+  steps:
+    - uses: jdx/mise-action@v2
+    - id: cache
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json', 'mise.toml') }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci
