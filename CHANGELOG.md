@@ -1,3 +1,7 @@
+# Changelog
+
+From version 2.0.2 on, release notes are on [GitHub Releases](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/releases): releases no longer commit to `main`, so the required checks on `main` can apply to every change. The entries below cover versions up to 2.0.1.
+
 ## [2.0.1](https://github.com/Marius-likes-coding/cf-optimized-xml-parser/compare/v2.0.0...v2.0.1) (2026-09-29)
 
 ### Bug Fixes
