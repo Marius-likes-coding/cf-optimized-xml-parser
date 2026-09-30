@@ -144,6 +144,21 @@ calibration order is random too; with 4 isolates the percentile bootstrap could 
 significant whenever all 4 agreed, so warm now uses 12 isolates and cold 60 per variant. The
 shards keep the run time down.
 
+**After the change (2026-10-01).** 5 A/A runs on GitHub runners (PR #31 twice, 3 manual runs
+with `base=HEAD`), 100 gated rows: no 🔴, no 🟢, one 🟡 inconclusive (rss-small cold +5.1%).
+The old leans are gone (mean warm change over the 5 runs: sitemap +0.1%, svg −0.0%); soap still
+leans about −1.3% (−2.9…−0.2), far below the gate. Median 99% interval half-widths:
+
+| check      | typical                                                    | widest                          |
+| ---------- | ---------------------------------------------------------- | ------------------------------- |
+| local cold | ±2–3.5% (rss ±3.2%, svg ±2.9%, soap ±1.7%, others ±2–2.5%) | ±14% (rss-small, ~7 ms total)   |
+| local warm | ±1.5–4% (ooxml ±1.5%, svg ±2.4%, rss ±3.5–4%)              | ±4.3% (rss-small), s3 up to ±6% |
+
+The warm intervals are about as wide as before, but they now hold up in repeated A/A runs; the
+cold rss rows narrowed from ±10% to about ±3%. perf-local took 2 min 36 s – 2 min 42 s per pull
+request (was about 4 min, and about 7 min until the comment appeared, which waited for
+perf-remote). The +14% sensitivity test (PR #29) hasn't been repeated with the new setup.
+
 **Remote.** On Cloudflare the divergence is far larger (the copy loaded second was 18–52%
 slower in 3 of 4 Workers of one A/A run), and it dominates: the +14% slowdown of test PR #29 did
 not show in the remote report at all (combined −8…+1%). Read the remote table as a check for
