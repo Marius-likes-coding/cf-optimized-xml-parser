@@ -1,0 +1,554 @@
+{
+  "kind": "local",
+  "timestamp": "2026-09-30T20:43:52.568Z",
+  "base": {
+    "ref": "HEAD^1",
+    "sha": "0c1d10c",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/.bench/base/src/index.ts"
+  },
+  "candidate": {
+    "ref": "working tree",
+    "sha": "487cfbd",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/src/index.ts"
+  },
+  "bundleHash": "d04101982f79, e30849aadd87",
+  "coldBundleHash": "46408e136db5",
+  "workerd": "1.20260815.1",
+  "flags": "--no-concurrent-recompilation --no-concurrent-sparkplug --no-maglev-build-code-on-background --no-maglev-deopt-data-on-background --no-lazy-compile-dispatcher --no-parallel-compile-tasks-for-eager-toplevel --no-parallel-compile-tasks-for-lazy",
+  "compatibilityDate": "2026-08-01",
+  "rows": [
+    {
+      "metric": "total-100",
+      "fixture": "rss-ascii",
+      "unit": "ms",
+      "base": 48.888888888888886,
+      "cand": 49.77777777777778,
+      "changePct": 1.81818181818183,
+      "lowPct": -8.652792990142377,
+      "highPct": 12.195121951219502,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 113798,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 1.7,
+          "early": 0.9925925925925926,
+          "later": 0.44037037037037036
+        },
+        "cand": {
+          "first": 1.8333333333333333,
+          "early": 1.0148148148148148,
+          "later": 0.4381481481481482
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-poison",
+      "unit": "ms",
+      "base": 53.888888888888886,
+      "cand": 52.77777777777778,
+      "changePct": -2.0618556701030855,
+      "lowPct": -10.277492291880785,
+      "highPct": 6.574761399787921,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 113798,
+        "twoByte": true
+      },
+      "breakdown": {
+        "base": {
+          "first": 2,
+          "early": 1.0592592592592593,
+          "later": 0.4722222222222222
+        },
+        "cand": {
+          "first": 1.9,
+          "early": 1.0814814814814815,
+          "later": 0.4533333333333333
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-small",
+      "unit": "ms",
+      "base": 5.5,
+      "cand": 5.722222222222222,
+      "changePct": 4.040404040404044,
+      "lowPct": -13.33333333333333,
+      "highPct": 24.7191011235955,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 3478,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 0.9666666666666667,
+          "early": 0.3037037037037037,
+          "later": 0.02259259259259259
+        },
+        "cand": {
+          "first": 0.9333333333333333,
+          "early": 0.34074074074074073,
+          "later": 0.021111111111111112
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-crlf",
+      "unit": "ms",
+      "base": 47.888888888888886,
+      "cand": 49.388888888888886,
+      "changePct": 3.132250580046403,
+      "lowPct": -4.664391353811148,
+      "highPct": 12.575574365175335,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 115158,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 1.8,
+          "early": 1.037037037037037,
+          "later": 0.4159259259259259
+        },
+        "cand": {
+          "first": 1.7666666666666666,
+          "early": 1.0444444444444445,
+          "later": 0.43851851851851853
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "svg",
+      "unit": "ms",
+      "base": 84.27777777777777,
+      "cand": 85.66666666666667,
+      "changePct": 1.6479894528675043,
+      "lowPct": -2.2771633051398843,
+      "highPct": 5.78114246386785,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 135212,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 4.3,
+          "early": 3.8740740740740742,
+          "later": 0.49925925925925924
+        },
+        "cand": {
+          "first": 4.2,
+          "early": 3.9851851851851854,
+          "later": 0.5085185185185185
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "soap",
+      "unit": "ms",
+      "base": 76.5,
+      "cand": 73.66666666666667,
+      "changePct": -3.703703703703698,
+      "lowPct": -8.096590909090917,
+      "highPct": 1.512859304084735,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 107370,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.6333333333333333,
+          "early": 2.72962962962963,
+          "later": 0.5433333333333333
+        },
+        "cand": {
+          "first": 2.5,
+          "early": 2.6814814814814816,
+          "later": 0.5251851851851852
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "s3-ascii",
+      "unit": "ms",
+      "base": 64.77777777777777,
+      "cand": 62.94444444444444,
+      "changePct": -2.8301886792452713,
+      "lowPct": -8.530405405405405,
+      "highPct": 3.6672629695885473,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 101228,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.433333333333333,
+          "early": 2.3703703703703702,
+          "later": 0.45814814814814814
+        },
+        "cand": {
+          "first": 2.433333333333333,
+          "early": 2.3814814814814813,
+          "later": 0.43666666666666665
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "ooxml-ascii",
+      "unit": "ms",
+      "base": 61.5,
+      "cand": 59.55555555555556,
+      "changePct": -3.1616982836495056,
+      "lowPct": -8.606921029281278,
+      "highPct": 3.289473684210531,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 86940,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.6666666666666665,
+          "early": 2.6222222222222222,
+          "later": 0.38814814814814813
+        },
+        "cand": {
+          "first": 2.6,
+          "early": 2.596296296296296,
+          "later": 0.3737037037037037
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "sitemap",
+      "unit": "ms",
+      "base": 56,
+      "cand": 56.611111111111114,
+      "changePct": 1.0912698412698374,
+      "lowPct": -3.746397694524506,
+      "highPct": 6.98151950718684,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 106090,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3,
+          "early": 2.3814814814814813,
+          "later": 0.3459259259259259
+        },
+        "cand": {
+          "first": 3.033333333333333,
+          "early": 2.4296296296296296,
+          "later": 0.35518518518518516
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "entities",
+      "unit": "ms",
+      "base": 63.611111111111114,
+      "cand": 65.44444444444444,
+      "changePct": 2.882096069868978,
+      "lowPct": -2.8901734104046173,
+      "highPct": 7.8483245149911784,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 124824,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.5,
+          "early": 1.9444444444444444,
+          "later": 0.4948148148148148
+        },
+        "cand": {
+          "first": 2.6666666666666665,
+          "early": 1.9703703703703703,
+          "later": 0.49296296296296294
+        }
+      }
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-ascii",
+      "unit": "µs",
+      "base": 155.74614065180103,
+      "cand": 161.22069754145227,
+      "changePct": 3.789168001271692,
+      "lowPct": -2.780093490728275,
+      "highPct": 8.989429272350646,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "+2.1 / +4.4 / +2.3 / +6.4"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-poison",
+      "unit": "µs",
+      "base": 193.4602062050909,
+      "cand": 198.2901726427623,
+      "changePct": 2.535511494317788,
+      "lowPct": 0.9683143263260696,
+      "highPct": 4.191346731063428,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "slower",
+      "detail": "+3.8 / +1.8 / +3.7 / +0.9"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-small",
+      "unit": "µs",
+      "base": 5.579097257364111,
+      "cand": 5.677368847505608,
+      "changePct": 1.8517005597956437,
+      "lowPct": 0.722535256813428,
+      "highPct": 5.459799899840423,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "+2.3 / +2.5 / +1.6 / +1.0"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-crlf",
+      "unit": "µs",
+      "base": 164.27141022311605,
+      "cand": 168.50569195060143,
+      "changePct": 2.384526582589497,
+      "lowPct": 1.0883980361348522,
+      "highPct": 2.958480130234653,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "+2.2 / +2.6 / +2.3 / +2.5"
+    },
+    {
+      "metric": "warm",
+      "fixture": "svg",
+      "unit": "µs",
+      "base": 480.718085106383,
+      "cand": 476.5220231854992,
+      "changePct": -0.9114983760102002,
+      "lowPct": -1.9642310247421357,
+      "highPct": -0.32702928506260776,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-1.6 / -0.5 / -1.0 / -0.6"
+    },
+    {
+      "metric": "warm",
+      "fixture": "soap",
+      "unit": "µs",
+      "base": 324.180666314683,
+      "cand": 318.5611839942355,
+      "changePct": -1.5278844079737564,
+      "lowPct": -2.5262575927751607,
+      "highPct": -0.017848118344421238,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-1.2 / -0.5 / -2.0 / -2.3"
+    },
+    {
+      "metric": "warm",
+      "fixture": "s3-ascii",
+      "unit": "µs",
+      "base": 249.30212212806535,
+      "cand": 248.3471880131363,
+      "changePct": -0.41629284339487205,
+      "lowPct": -1.977720029957053,
+      "highPct": 1.116709361153534,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-0.5 / -2.2 / -0.5 / +1.5"
+    },
+    {
+      "metric": "warm",
+      "fixture": "ooxml-ascii",
+      "unit": "µs",
+      "base": 333.4750871282075,
+      "cand": 332.22591362126246,
+      "changePct": -0.3354289673989208,
+      "lowPct": -0.9765282292312216,
+      "highPct": 0.38321705632538006,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-0.5 / +0.5 / -0.9 / -0.5"
+    },
+    {
+      "metric": "warm",
+      "fixture": "sitemap",
+      "unit": "µs",
+      "base": 300.1006016565088,
+      "cand": 305.38617886178866,
+      "changePct": 1.8067767899194287,
+      "lowPct": 0.6771590906178293,
+      "highPct": 3.3532519628197477,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "+2.5 / +0.7 / +2.2 / +1.8"
+    },
+    {
+      "metric": "warm",
+      "fixture": "entities",
+      "unit": "µs",
+      "base": 320.4884182355113,
+      "cand": 324.1966366966367,
+      "changePct": 1.2173340134658206,
+      "lowPct": -1.348374153429266,
+      "highPct": 2.805004785285403,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "+2.0 / -2.1 / +2.7 / +2.3"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-ascii",
+      "unit": "KB",
+      "base": 106.25390625,
+      "cand": 103.8984375,
+      "changePct": -2.21683026359325,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-poison",
+      "unit": "KB",
+      "base": 103.87890625,
+      "cand": 103.87890625,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-small",
+      "unit": "KB",
+      "base": 3.44921875,
+      "cand": 3.44921875,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-crlf",
+      "unit": "KB",
+      "base": 103.76171875,
+      "cand": 103.73046875,
+      "changePct": -0.03011708014908354,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "svg",
+      "unit": "KB",
+      "base": 330.91015625,
+      "cand": 330.91015625,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "soap",
+      "unit": "KB",
+      "base": 271.0078125,
+      "cand": 271.1015625,
+      "changePct": 0.03459309867681615,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "s3-ascii",
+      "unit": "KB",
+      "base": 175.44921875,
+      "cand": 175.44921875,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "ooxml-ascii",
+      "unit": "KB",
+      "base": 313.421875,
+      "cand": 313.453125,
+      "changePct": 0.009970586769036949,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "sitemap",
+      "unit": "KB",
+      "base": 269.71484375,
+      "cand": 269.71484375,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "entities",
+      "unit": "KB",
+      "base": 302.2578125,
+      "cand": 302.2578125,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    }
+  ],
+  "notes": [],
+  "accepted": false,
+  "regressions": 0
+}
