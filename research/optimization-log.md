@@ -118,3 +118,52 @@ Rejected in the M7 performance pass (2026-09-29, workerd 1.20260815.1, V8 15.1);
   (e.g. outlining only the cold `fail()` throws, not the digit loop), or the s3-cold compile
   sensitivity is isolated first (dead-code-only ablation of the same function count; if s3 still
   regresses, the gate cannot see past compile noise for changes of this size).
+
+### 2026-09-30: Cheaper entity decoding — RAW fast path + first-char dispatch (failed)
+
+- **Hypothesis:** Ablation (`bench-ab` on spike copies, all four JIT tiers) shows entity decoding
+  is ~55% of the entities fixture and ~10% of sitemap/s3 in every tier, while the other two big
+  costs found have no legal angle (below). Removing per-entity call overhead in `decodeEntities`
+  (same output) should improve entities total-100 by ~5% and sitemap/s3 by ~1–2%, with
+  entity-free fixtures neutral. `parseString` untouched.
+- **Change:** `src/entities.ts` only, three rounds (all reverted; only this log ships):
+  (r1) skip the per-segment `normalize()` call when `mode === RAW` (cached boolean + ternary;
+  identical output since `normalize` returns its input for RAW);
+  (r2) r1 plus first-character dispatch with integer compares instead of the `startsWith`
+  chain (size pins the length between `&` and `;`, so matching the rest is exact; out-of-bounds
+  `charCodeAt` is `NaN`, like a failed `startsWith`);
+  (r3) r2 with r1 reverted (dispatch only). No warm-up change: both modes and all reference
+  kinds are already exercised.
+- **Measured:** base `60c5c12` → candidate `60c5c12`+dirty; workerd 1.20260815.1.
+  r1 quick (`entities,sitemap,s3-ascii,svg`; 10 cold / 4 warm isolates): cold all ⚪ same
+  (entities +2.2%, sitemap −5.3% with CI crossing 0, s3-ascii −2.2%, svg −3.3%); warm ≈ +1%
+  (entities +2.3%, sitemap +1.3% with all 4 isolates positive — the ternary's branch costs at
+  the top tier where `normalize` is inlined anyway).
+  r2 quick: cold all ⚪ same (entities −4.7%, s3-ascii −2.7%, svg −1.8%, sitemap −0.2%);
+  warm entities −3.2%, sitemap −2.6%, s3-ascii −3.1% (CIs below 0), svg −0.3%.
+  r2 full (60 cold / 12 warm isolates): cold entities −3.8% (−5.8…−2.0) ⚪, all other fixtures
+  ⚪ same, no 🟡/🔴; warm entities −2.1% (all 12 isolates negative), s3-ascii −1.0%, rest neutral;
+  memory unchanged (rss-ascii −2.2% baseline offset again).
+  r3 quick: cold entities −6.0% but CI (−12.6…+1.5) crosses 0; warm entities −1.6%, weaker than
+  r2 — wrong direction, so no full run.
+  Equiv `SAME` on 5,427 inputs (r2); `typecheck` + `lint` pass. Encoding/bytes checks not run
+  (failed locally; `src/decode.ts` untouched).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the mechanism is real but too small: dispatch saves ~1 call per entity
+  (~7 ns × 4,900 entities × 100 parses ≈ 3.4 ms ≈ the observed −3.2 ms on entities), and the
+  remaining decode cost is builtin scans plus slices and concatenations, which are inherent to
+  producing decoded output. entities needs −4.2 ms for the 5% gate; the ~1 ms gap has no
+  identified source. Notably, s3-ascii cold stayed neutral this time (no 🟡): smaller diffs
+  wobble it less.
+- **Retry if:** someone finds ~1 ms more in `decodeEntities` without new calls or branches on
+  the hot path (e.g. a single-entity-text fast path, if measurements show it is common), or the
+  entities fixture's share grows.
+- **Ablation appendix (for future loops — measured with `bench-ab`, medians, full tier):**
+  skipping entity expansion: entities −52%, sitemap −12%, s3-ascii −9%, svg ±0% (this idea's
+  target); skipping the duplicate-attribute check: svg −8%, others ±0% — no legal angle, the
+  check cannot be weakened; skipping the end-tag `startsWith` match: s3-ascii −16%,
+  sitemap −11% — no legal angle, same reason. Reordering the named-entity checks by frequency
+  is worthless and was not tried in code: every miss short-circuits on the `size === N`
+  integer compare, so each hit already costs exactly one `startsWith`; reordering only moves
+  ~1 ns compares (measured entity frequencies: amp 6,906, quot 3,920, lt/gt 1,400 each,
+  numeric 700, apos 0 across the matrix).
