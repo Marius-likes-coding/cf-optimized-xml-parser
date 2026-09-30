@@ -14,6 +14,8 @@ export default defineConfig(
       "coverage/**",
       "bench/results/**",
       "test/fixtures/generated/**",
+      // Paired benchmarks: the base worktree and the generated bench Worker (scripts/bench-lib.mjs).
+      ".bench/**",
       "src/worker-configuration.d.ts",
       // Throwaway design experiments; readability is explicitly not a goal there.
       "spikes/**",

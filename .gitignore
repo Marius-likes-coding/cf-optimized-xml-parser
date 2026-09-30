@@ -14,3 +14,7 @@ bench/results/tiers-*.json
 bench/results/xmlconf.json
 bench/results/fuzz-failure.xml
 .cache/
+
+# Paired benchmarks: base worktree and generated bench Worker
+.bench/
+bench/results/perf-*.json
