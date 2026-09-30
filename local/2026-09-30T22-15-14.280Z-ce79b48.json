@@ -1,0 +1,554 @@
+{
+  "kind": "local",
+  "timestamp": "2026-09-30T22:12:25.001Z",
+  "base": {
+    "ref": "HEAD^1",
+    "sha": "487cfbd",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/.bench/base/src/index.ts"
+  },
+  "candidate": {
+    "ref": "working tree",
+    "sha": "ce79b48",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/src/index.ts"
+  },
+  "bundleHash": "d04101982f79, e30849aadd87",
+  "coldBundleHash": "46408e136db5",
+  "workerd": "1.20260815.1",
+  "flags": "--no-concurrent-recompilation --no-concurrent-sparkplug --no-maglev-build-code-on-background --no-maglev-deopt-data-on-background --no-lazy-compile-dispatcher --no-parallel-compile-tasks-for-eager-toplevel --no-parallel-compile-tasks-for-lazy",
+  "compatibilityDate": "2026-08-01",
+  "rows": [
+    {
+      "metric": "total-100",
+      "fixture": "rss-ascii",
+      "unit": "ms",
+      "base": 48.27777777777778,
+      "cand": 48.77777777777778,
+      "changePct": 1.0356731875719172,
+      "lowPct": -6.915477497255762,
+      "highPct": 10.396039603960405,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 113798,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 1.7,
+          "early": 1.0185185185185186,
+          "later": 0.41333333333333333
+        },
+        "cand": {
+          "first": 1.8,
+          "early": 1.0444444444444445,
+          "later": 0.41888888888888887
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-poison",
+      "unit": "ms",
+      "base": 50.888888888888886,
+      "cand": 52.5,
+      "changePct": 3.1659388646288367,
+      "lowPct": -4.57856399583767,
+      "highPct": 10.869565217391308,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 113798,
+        "twoByte": true
+      },
+      "breakdown": {
+        "base": {
+          "first": 1.8,
+          "early": 1.0444444444444445,
+          "later": 0.44925925925925925
+        },
+        "cand": {
+          "first": 1.8,
+          "early": 1.0148148148148148,
+          "later": 0.46111111111111114
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-small",
+      "unit": "ms",
+      "base": 6.055555555555555,
+      "cand": 6.611111111111111,
+      "changePct": 9.174311926605494,
+      "lowPct": -16.03773584905661,
+      "highPct": 34.95145631067962,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "inconclusive",
+      "shape": {
+        "length": 3478,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 0.9666666666666667,
+          "early": 0.3296296296296296,
+          "later": 0.024814814814814814
+        },
+        "cand": {
+          "first": 0.7333333333333333,
+          "early": 0.34814814814814815,
+          "later": 0.02962962962962963
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-crlf",
+      "unit": "ms",
+      "base": 48.333333333333336,
+      "cand": 48.77777777777778,
+      "changePct": 0.9195402298850519,
+      "lowPct": -5.7080131723381005,
+      "highPct": 6.360424028268552,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 115158,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 1.7333333333333334,
+          "early": 1.0222222222222221,
+          "later": 0.4185185185185185
+        },
+        "cand": {
+          "first": 1.5333333333333334,
+          "early": 1.0518518518518518,
+          "later": 0.4162962962962963
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "svg",
+      "unit": "ms",
+      "base": 82.66666666666667,
+      "cand": 83.44444444444444,
+      "changePct": 0.9408602150537515,
+      "lowPct": -3.0020013342228147,
+      "highPct": 4.341926729986434,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 135212,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 4.233333333333333,
+          "early": 3.937037037037037,
+          "later": 0.47814814814814816
+        },
+        "cand": {
+          "first": 4.266666666666667,
+          "early": 3.9444444444444446,
+          "later": 0.4822222222222222
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "soap",
+      "unit": "ms",
+      "base": 69.38888888888889,
+      "cand": 66.83333333333333,
+      "changePct": -3.68294635708567,
+      "lowPct": -8.715596330275243,
+      "highPct": 2.6533996683250294,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 107370,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.433333333333333,
+          "early": 2.5703703703703704,
+          "later": 0.4848148148148148
+        },
+        "cand": {
+          "first": 2.466666666666667,
+          "early": 2.525925925925926,
+          "later": 0.4688888888888889
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "s3-ascii",
+      "unit": "ms",
+      "base": 61.888888888888886,
+      "cand": 61.5,
+      "changePct": -0.6283662477558294,
+      "lowPct": -7.100085543199308,
+      "highPct": 7.082152974504252,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 101228,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.566666666666667,
+          "early": 2.3333333333333335,
+          "later": 0.43074074074074076
+        },
+        "cand": {
+          "first": 2.6,
+          "early": 2.311111111111111,
+          "later": 0.43296296296296294
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "ooxml-ascii",
+      "unit": "ms",
+      "base": 57.611111111111114,
+      "cand": 55.72222222222222,
+      "changePct": -3.2786885245901676,
+      "lowPct": -9.551098376313272,
+      "highPct": 4.091816367265477,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 86940,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.466666666666667,
+          "early": 2.6074074074074076,
+          "later": 0.3459259259259259
+        },
+        "cand": {
+          "first": 2.5,
+          "early": 2.5555555555555554,
+          "later": 0.33666666666666667
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "sitemap",
+      "unit": "ms",
+      "base": 54.833333333333336,
+      "cand": 56.05555555555556,
+      "changePct": 2.228976697061813,
+      "lowPct": -4.904904904904905,
+      "highPct": 9.206349206349218,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 106090,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.1,
+          "early": 2.437037037037037,
+          "later": 0.3348148148148148
+        },
+        "cand": {
+          "first": 3.1333333333333333,
+          "early": 2.474074074074074,
+          "later": 0.3337037037037037
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "entities",
+      "unit": "ms",
+      "base": 62.5,
+      "cand": 63,
+      "changePct": 0.8000000000000007,
+      "lowPct": -6.358885017421601,
+      "highPct": 9.419600380589909,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 124824,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.6333333333333333,
+          "early": 1.9111111111111112,
+          "later": 0.4640740740740741
+        },
+        "cand": {
+          "first": 2.533333333333333,
+          "early": 1.9296296296296296,
+          "later": 0.4785185185185185
+        }
+      }
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-ascii",
+      "unit": "µs",
+      "base": 161.83857808857806,
+      "cand": 158.81572581671884,
+      "changePct": -1.8880511516078724,
+      "lowPct": -5.987179778585672,
+      "highPct": 3.4905416608469464,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-4.0 / +0.2 / +2.4 / -6.0"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-poison",
+      "unit": "µs",
+      "base": 196.57407384783122,
+      "cand": 198.9960469603183,
+      "changePct": 1.0093827095053243,
+      "lowPct": -2.0635580434169243,
+      "highPct": 4.4925587512905985,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-2.2 / +3.9 / +0.7 / +1.7"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-small",
+      "unit": "µs",
+      "base": 5.721893366327615,
+      "cand": 5.749532073640567,
+      "changePct": 0.40639294681910076,
+      "lowPct": -1.4906072769927392,
+      "highPct": 2.5530596617715284,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-1.8 / +1.1 / +1.6 / +0.7"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-crlf",
+      "unit": "µs",
+      "base": 168.06127091282838,
+      "cand": 166.72484351943302,
+      "changePct": -0.56692829273568,
+      "lowPct": -3.4518433098439827,
+      "highPct": 1.4207443718667223,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-2.2 / -0.6 / -0.0 / +0.6"
+    },
+    {
+      "metric": "warm",
+      "fixture": "svg",
+      "unit": "µs",
+      "base": 459.7414339572282,
+      "cand": 455.7990671996954,
+      "changePct": -0.7320594161371541,
+      "lowPct": -2.355719258591704,
+      "highPct": 0.5490482720647227,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-1.2 / -0.5 / -0.9 / -0.3"
+    },
+    {
+      "metric": "warm",
+      "fixture": "soap",
+      "unit": "µs",
+      "base": 295.6407457593095,
+      "cand": 300.6983423307474,
+      "changePct": 1.6431237885923933,
+      "lowPct": -1.0897019358612203,
+      "highPct": 3.5323977208711277,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-0.0 / +3.0 / +2.4 / +1.2"
+    },
+    {
+      "metric": "warm",
+      "fixture": "s3-ascii",
+      "unit": "µs",
+      "base": 226.42629456154046,
+      "cand": 225.94167387542788,
+      "changePct": -0.1532370198689348,
+      "lowPct": -3.7734093915367195,
+      "highPct": 3.5923459893207887,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-2.3 / +0.5 / +2.5 / -1.2"
+    },
+    {
+      "metric": "warm",
+      "fixture": "ooxml-ascii",
+      "unit": "µs",
+      "base": 312.3716561216561,
+      "cand": 312.0284860840636,
+      "changePct": 0.15988881720570003,
+      "lowPct": -1.4498763488376087,
+      "highPct": 1.706338056113732,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-1.3 / +1.2 / +0.3 / +0.4"
+    },
+    {
+      "metric": "warm",
+      "fixture": "sitemap",
+      "unit": "µs",
+      "base": 267.9906071036579,
+      "cand": 269.0668549635832,
+      "changePct": 0.2862320672841312,
+      "lowPct": -0.5736696874704128,
+      "highPct": 2.0750897447520122,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "same",
+      "detail": "-0.3 / +0.2 / +1.0 / +0.3"
+    },
+    {
+      "metric": "warm",
+      "fixture": "entities",
+      "unit": "µs",
+      "base": 316.63355032070336,
+      "cand": 330.2728384473909,
+      "changePct": 3.4555058688320095,
+      "lowPct": 0.04979112261276342,
+      "highPct": 6.3326502998704015,
+      "thresholdPct": 5,
+      "gated": true,
+      "status": "slower",
+      "detail": "+6.4 / +4.3 / +1.3 / +1.9"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-ascii",
+      "unit": "KB",
+      "base": 106.25390625,
+      "cand": 103.8984375,
+      "changePct": -2.21683026359325,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-poison",
+      "unit": "KB",
+      "base": 103.87890625,
+      "cand": 103.87890625,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-small",
+      "unit": "KB",
+      "base": 3.44921875,
+      "cand": 3.44921875,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-crlf",
+      "unit": "KB",
+      "base": 103.76171875,
+      "cand": 103.73046875,
+      "changePct": -0.03011708014908354,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "svg",
+      "unit": "KB",
+      "base": 330.91015625,
+      "cand": 330.91015625,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "soap",
+      "unit": "KB",
+      "base": 271.0078125,
+      "cand": 271.1015625,
+      "changePct": 0.03459309867681615,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "s3-ascii",
+      "unit": "KB",
+      "base": 175.44921875,
+      "cand": 175.44921875,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "ooxml-ascii",
+      "unit": "KB",
+      "base": 313.421875,
+      "cand": 313.453125,
+      "changePct": 0.009970586769036949,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "sitemap",
+      "unit": "KB",
+      "base": 269.71484375,
+      "cand": 269.71484375,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "entities",
+      "unit": "KB",
+      "base": 302.2578125,
+      "cand": 302.2578125,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    }
+  ],
+  "notes": [],
+  "accepted": false,
+  "regressions": 0
+}
