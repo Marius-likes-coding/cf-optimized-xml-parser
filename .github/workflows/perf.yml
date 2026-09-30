@@ -37,6 +37,7 @@ jobs:
   # with the perf-remote label. shards: one runner per share of the fixtures.
   scope:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       bench: ${{ steps.scope.outputs.bench }}
       remote: ${{ steps.scope.outputs.remote }}
@@ -101,6 +102,7 @@ jobs:
     needs: [scope, perf-local-shard]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           SCOPE: ${{ needs.scope.result }}

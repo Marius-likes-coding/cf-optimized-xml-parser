@@ -173,13 +173,6 @@ export async function buildBenchWorker(variants, options) {
   return { script, hash };
 }
 
-/** A copy of `list` in random order. */
-const shuffled = (list, random) =>
-  list
-    .map((value) => [random(), value])
-    .sort((a, b) => a[0] - b[0])
-    .map(([, value]) => value);
-
 /** One /run request against a local workerd Worker. */
 async function run(worker, query) {
   const response = await worker.fetch(`http://bench/run?${new URLSearchParams(query)}`);
@@ -271,7 +264,7 @@ export async function measureWarm({
       const counts = [];
       for (const worker of handles) {
         const perKey = {};
-        for (const key of shuffled(keys, random)) {
+        for (const key of random() < 0.5 ? keys : keys.toReversed()) {
           let count = 1;
           let { ms } = await run(worker, { v: key, fixture, count, input });
           while (ms < burstMs / 4 && count < 1_000_000) {
@@ -286,7 +279,7 @@ export async function measureWarm({
       // Round-robin over isolates too, so machine drift hits all of them alike.
       for (let round = 0; round < warmupRounds + rounds; round++) {
         for (const [index, worker] of handles.entries()) {
-          for (const key of shuffled(keys, random)) {
+          for (const key of random() < 0.5 ? keys : keys.toReversed()) {
             const scale = 1 + jitter * (2 * random() - 1);
             const count = Math.max(1, Math.round(counts[index][key] * scale));
             const { ms } = await run(worker, { v: key, fixture, count, input });
