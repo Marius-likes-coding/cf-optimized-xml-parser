@@ -684,3 +684,35 @@ paired bench (no intervals) and can't be re-scored.
   with many attribute-bearing lines (svg-like) is added to the gate. A variant without the tab
   memo's full scan (for example, tabs checked per value only when the value is long) was not
   tried.
+
+### 2026-10-01: Fewer charCodeAt sites to cut Turbofan's loop unrolling (failed — diagnostic)
+
+- **Hypothesis:** Turbofan's compile of `parseString` (15–25 ms per isolate) is now the largest
+  single item in `total-100`. Node's `--turbo-stats` (V8 13.6; same pipeline, svg 23 ms like
+  workerd's 24) puts register allocation at 28% and Turboshaft's optimization at 32%, with
+  `TurboshaftLoopUnrolling` 1.4 ms and 14% of the compile's memory. With
+  `--no-turboshaft-loop-unrolling` (diagnosis only; a flag can't ship), workerd compiles
+  `parseString` 3–6 ms faster (s3 15.1 → 12.0, rss 19.6 → 15.1, svg ~24.5 → 18.3). A synthetic
+  function with 40 `charCodeAt` sites and no JS loop compiles in 12.3 ms in workerd, 5.5 ms
+  without unrolling: each `charCodeAt` lowers to a small loop over string representations
+  (cons, sliced, thin), and Turboshaft partially unrolls each one ×4. `parseString` has 21 such
+  sites. Fewer sites should mean less compile.
+- **Change:** `src/parse-string.ts`, two equivalent variants, compile time measured only
+  (per-request trace, 3 fresh isolates each); reverted, only this log ships.
+  (v1) the text and end-tag whitespace loops as `do … while` with one `charCodeAt` site each
+  instead of two. (v2) the name-cache hash read through a one-site loop
+  (`for (k = lt + 2; k < lt + 5; k++) slot = (slot << 2) ^ xml.charCodeAt(k)`) instead of three
+  sites.
+- **Measured:** base `e0ca77a` → candidate +dirty; workerd 1.20260815.1. Turbofan compile of
+  `parseString`: base s3-ascii 15.1/15.3, rss-ascii 19.5/19.8 ms; v1 s3 16.2–16.5, rss
+  20.7–20.9 (+1.2 ms); v2 s3 15.2–15.8, rss 19.7–20.0 (no change). No bench:pr round (no compile
+  saving to measure).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** removing sites in source doesn't remove lowered loops one for one. Turbofan's own loop
+  peeling copies the first iteration of each innermost JS loop, and a `do … while` or a short
+  `for` adds loop structure of its own, so the graph stays the same size or grows.
+- **Retry if:** V8 stops unrolling the `charCodeAt` lowering loop (re-measure the synthetic: if
+  12.3 vs 5.5 ms closes, this entry is obsolete), or someone finds a construct that reads a
+  character without that loop. Notes for future loops: (1) Node's `--turbo-stats` works for
+  Turbofan phase timings (workerd's are lost when it's killed); `spikes`-style scripts lived in
+  the scratchpad. (2) Compile time doesn't follow bytecode size alone: measure each variant.
