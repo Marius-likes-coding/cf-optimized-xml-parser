@@ -202,3 +202,34 @@ Rejected in the M7 performance pass (2026-09-29, workerd 1.20260815.1, V8 15.1);
   re-run before rejecting on it alone; (3) the s3-cold question that remains is narrower: new
   module-level functions (not inline size) shifting feedback/inlining, still untested — a
   dead-export ablation could isolate that if it ever blocks again.
+
+### 2026-09-30: Sticky-regex whitespace skip in the text path (failed)
+
+- **Hypothesis:** Dropping whitespace-only text between elements burns an interpreted
+  `charCodeAt` loop per segment. S1 showed builtins (regex/`indexOf`) beat char loops in the
+  early tiers, which dominate total-100. One sticky `/[ \t\n\r]*/y` test should skip each run
+  in compiled code; a first-`charCodeAt` guard keeps content-starting segments (minified s3) on
+  the old cost. Pretty-printed fixtures (rss, svg, sitemap) should improve cold; s3 neutral.
+- **Change:** `src/parse-string.ts` text branch only: the `while` whitespace loop replaced by a
+  first-character check plus `WS_RUN_RE.test()` (`lastIndex` seeded per segment). The class
+  matches exactly the loop's four characters (not `\s`); overshoot past `textEnd` can only
+  happen for trailing whitespace at end of input and takes the same drop path. All reverted;
+  only this log ships.
+- **Measured:** base `7ef1a29` → candidate `7ef1a29`+dirty; workerd 1.20260815.1.
+  Quick (`rss-ascii,s3-ascii,svg,sitemap`; 10 cold / 4 warm): cold all ⚪ same (rss-ascii +2.0%,
+  s3-ascii +1.0%, svg −2.2%, sitemap +4.0% — point estimates on the targets go the wrong way);
+  warm rss-ascii +5.4% (−1.7…+10.8) 🟡 inconclusive (+7.3/+7.7/+9.7/−2.7 per isolate),
+  svg +2.9% (−0.1…+5.0, 3/4 isolates positive), sitemap +1.0%, s3-ascii −2.8% (one −13.9
+  isolate, noise). Equiv `SAME` on 5,427 inputs; `typecheck` + `lint` pass. No full run, no
+  encoding/bytes checks (rejected on warm).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** S1's "builtins win" does not transfer to short runs at the top tier: a sticky-regex
+  `test()` (call + `lastIndex` machinery + Irregexp exec) is slower than a 2–6-iteration
+  optimized `charCodeAt` loop, and warm runs entirely at the top tier. The early-tier win never
+  showed either — indentation runs are too short for the C++ scan to matter, while every
+  segment pays the first-`charCodeAt` plus branch plus regex call. Two target fixtures regress
+  in the same direction, so this is a real effect, not noise.
+- **Retry if:** documents with very long whitespace runs (measure the run-length distribution
+  first — indentation here is 2–6 chars), or V8 ever makes sticky `test()` cheaper than a short
+  integer loop. Note for future loops: S1's builtin advantage is for long scans and low tiers;
+  at the top tier on short runs, plain integer loops win.
