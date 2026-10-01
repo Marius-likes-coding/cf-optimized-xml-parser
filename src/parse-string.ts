@@ -359,6 +359,11 @@ export function parseString(
       if (similar === NO_ELEMENT) usedSlots.push(slot);
     }
     let aTop = 0;
+    // While every name so far matched the cached element's in order, they are a prefix of names
+    // that passed the duplicate and maxAttributes checks in this parse, so both are skipped.
+    let onPrediction = true;
+    // Whether seenNames holds this element's names (it's built at the 17th checked name).
+    let seenReady = false;
     for (;;) {
       while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = xml.charCodeAt(++p);
       if (ch === 62 || ch === 47) break;
@@ -380,22 +385,26 @@ export function parseString(
         ch = xml.charCodeAt(p);
         attributeName = xml.slice(nameStart, p);
         missed = true;
+        onPrediction = false;
       }
-      // Duplicate check: a linear scan up to 16 attributes, a Set beyond, so raised limits
-      // can't make it quadratic (20k attributes: 1.2 s linear).
-      if (aTop < 32) {
-        for (let k = 0; k < aTop; k += 2) {
-          if (attributeScratch[k] === attributeName) fail("duplicate attribute", xml, nameStart);
+      if (!onPrediction) {
+        // Duplicate check: a linear scan up to 16 attributes, a Set beyond, so raised limits
+        // can't make it quadratic (20k attributes: 1.2 s linear).
+        if (aTop < 32) {
+          for (let k = 0; k < aTop; k += 2) {
+            if (attributeScratch[k] === attributeName) fail("duplicate attribute", xml, nameStart);
+          }
+        } else {
+          if (!seenReady) {
+            seenNames.clear();
+            for (let k = 0; k < aTop; k += 2) seenNames.add(attributeScratch[k] as string);
+            seenReady = true;
+          }
+          if (seenNames.has(attributeName)) fail("duplicate attribute", xml, nameStart);
+          seenNames.add(attributeName);
         }
-      } else {
-        if (aTop === 32) {
-          seenNames.clear();
-          for (let k = 0; k < 32; k += 2) seenNames.add(attributeScratch[k] as string);
-        }
-        if (seenNames.has(attributeName)) fail("duplicate attribute", xml, nameStart);
-        seenNames.add(attributeName);
+        if (aTop === maxAttributes * 2) fail("more attributes than maxAttributes", xml, lt);
       }
-      if (aTop === maxAttributes * 2) fail("more attributes than maxAttributes", xml, lt);
       while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = xml.charCodeAt(++p);
       if (ch !== 61) fail('missing "=" after attribute name', xml, p);
       ch = xml.charCodeAt(++p);

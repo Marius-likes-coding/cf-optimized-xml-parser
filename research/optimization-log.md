@@ -827,3 +827,58 @@ paired bench (no intervals) and can't be re-scored.
   almost nothing: parse state in one reused object, end position as the return value. Or if
   the gate weighs attribute-light documents more. The compile numbers above give the upside:
   about −4 ms of Turbofan compile per isolate on s3 and sitemap.
+
+### 2026-10-01: Skip the duplicate and maxAttributes checks for predicted attribute names (accepted)
+
+- **Hypothesis:** The ablation appendix of the entity-decoding entry measured the duplicate-
+  attribute check at ~8% of svg warm time, with "no legal angle" then. The name cache (#44)
+  creates one: while a start tag's attribute names match the cached element's names in order,
+  they are a prefix of a list that passed the duplicate check and the maxAttributes check in this
+  parse, with the same limits. Neither check can fail, so both can be skipped. Attribute-heavy
+  documents with repeated elements (svg) should gain warm and cold; others are neutral.
+- **Change:** two rounds.
+  (r1, rejected) a lean inline loop for predicted names (no regex, no duplicate or
+  maxAttributes check), with everything else (no prediction, a different or an extra name)
+  continued in an out-of-line `attributes()` (958 bytecode bytes; `parseString` 3,698 → 3,380).
+  Attribute-light documents then never ran the inline loop, so Turbofan compiled `parseString`
+  ~4 ms faster on s3 and sitemap. Warm-up extended so the inline loop saw every value kind.
+  (r2, shipped) `src/parse-string.ts` only: in the existing loop, `onPrediction` stays true
+  while every name hit the prediction, and the two checks run only once it's false. The
+  duplicate check's Set (used beyond 16 names) is now built from all names so far the first
+  time it's needed (`seenReady`), since the check may start late. No new path for the
+  warm-up: block coverage unchanged. `test/unit/strict.test.ts`: three tests (duplicate after
+  predicted names, also beyond 16; maxAttributes after predicted names; predicted, extra and
+  reordered names with entities, quotes and tabs).
+- **Measured:** base `e0ca77a`; workerd 1.20260815.1. Equivalence `SAME` (both rounds) on 5,427
+  and 64,908 inputs, on 160,000 random attribute-list documents (duplicates, more than 16
+  names, mispredictions, `maxAttributes` 3 and 17, `maxNameLength` 1) and on 200,000 entity
+  documents, full error messages.
+  r1 full (60 cold / 12 warm): cold svg −7.2% 🟢, s3-ascii −7.7% 🟢, sitemap −7.3% 🟢; warm svg
+  −9.1% 🟢; rss-small cold +8.0% 🟡 inconclusive. Pooled `bench:cold` (300 isolates per
+  variant): rss-small +17% (6.46 → 7.58 ms, +1.06 ms in parses 11–100), s3-small −6%. In small
+  documents, elements whose attributes don't repeat within the document (root, the first
+  `<guid>`) run `attributes()`, which stays in Ignition/Sparkplug until ~parse 55. Before,
+  that code ran in Maglev-compiled `parseString` from parse 9. Rejected for that.
+  r2 quick (`svg,soap,ooxml-ascii,rss-ascii,rss-small`; 10/4): cold svg −7.1% 🟢; warm svg
+  −9.1% 🟢; rest ⚪. Pooled rss-small (300 isolates): 6.78 → 6.85 ms (+0.9% mean, −0.3% trimmed).
+  r2 full (60 cold / 12 warm): cold svg −5.1% 🟢 (−6.9…−3.5), soap −1.9%, others within
+  ±1% except rss-poison +3.2% (±8) ⚪ and rss-small +8.6% 🟡 inconclusive (−5.2…+23.7; the
+  pooled measurement above is neutral); warm svg −9.5% 🟢 (−10.1…−8.9, all 12 isolates), soap
+  −1.0%, ooxml −0.8%, rss-poison −1.1%, rest ±0.4% ⚪; memory unchanged.
+  Encodings (`rss-latin1,rss-cjk,ooxml-cjk,s3-cjk`): cold −1.4/−1.6/−0.5/−0.5%, warm
+  +0.4/−1.8/−0.8/−0.1%, all ⚪. `src/decode.ts` untouched, so no bytes check.
+  Lint, typecheck, 163 unit tests, fuzz (20,000 inputs), size (8.71 kB brotlied), conformance
+  1263/1736 = main.
+- **CI:** perf-local watched before merge (required: no 🔴 row and svg total-100 🟢 again);
+  `perf-remote` label not added (report-only).
+- **Why:** svg repeats elements with many attributes (5–7 per `<rect>`/`<path>`), so the linear
+  duplicate scan (up to 15 compares per name) was a large share of its attribute work. Other
+  fixtures have one or two attributes per element, where the scan was short anyway. r1 showed
+  that the compile saving of moving the general path out is real (~4 ms on s3 and sitemap). But
+  a function called only a few times per parse stays in the slow tiers, and small documents
+  pay for that.
+- **Retry if:** accepted. r1's outlining is worth another try only if small documents can avoid
+  it, for example if the general path is moved out only for elements past the root, or if V8
+  tiers up rarely called functions sooner. Note for future loops: a gated-row 🟡 inconclusive
+  on rss-small has appeared in four full runs in a row (+2.5…+8.6%). Pooled `bench:cold`
+  (`SAMPLES=75`, four passes) settles it.
