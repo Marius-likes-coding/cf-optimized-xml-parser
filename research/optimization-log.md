@@ -527,3 +527,66 @@ paired bench (no intervals) and can't be re-scored.
   123/115, s3 72/72 vs 66/64).
   (3) `spikes/m7-profile.mjs` no longer starts: workerd 1.20260815.1's V8 rejects
   `--no-lazy-source-positions`. Drop the flag to use it (outside this loop's scope to fix).
+
+### 2026-10-01: Name cache with attribute-name prediction (failed)
+
+- **Hypothesis:** A warm `--prof` profile (attribution below) puts `NAME_RE.test()` at 17–31% of
+  warm time on every fixture but entities (rss 20%, svg 31%, soap 24%, ooxml 24%, s3 18.5%,
+  sitemap 16.6%, entities 9.6%), and more than half of that is the `RegExpPrototypeTestFast`
+  builtin's call overhead, not the match. Documents repeat a small set of names. A direct-mapped
+  cache of the last element per hash of the four characters after "<" lets a repeated start tag
+  take the cached name after a slice + `===` check, and the cached element's attribute list
+  predicts the new element's attribute names, checked the same way. Equivalent: a hit needs the
+  exact characters and then one that ends a name, so NAME_RE would match exactly the cached
+  (already validated) name. Simulated hit rate: ~99% for element and attribute names on every
+  large fixture (256 slots), 55–80% on rss-small/s3-small. Attribute-heavy fixtures (svg, soap,
+  ooxml) should gain most, and repeated names stop allocating a string each (less retained memory).
+- **Change:** `src/parse-string.ts` only; two rounds, reverted; only this log ships. Module-level
+  `recent` (256 elements, empty slots hold a dummy named "/", which no start tag can match),
+  `usedSlots` (reset at the end of a parse and in `resetParser()`, so no node outlives a parse).
+  (r1) slot = `((c·31 + c2)·31 + c3)·31 + c4 & 255`, the element is stored on every start tag.
+  (r2) slot = `(c << 6 ^ c2 << 4 ^ c3 << 2 ^ c4) & 255` (no overflow checks; same simulated
+  hit rates), stored only after a miss of the name or any attribute name (r1's store paid a
+  write barrier, `RecordWriteSaveFP` 3–4% of warm time). Misses run the old NAME_RE code
+  unchanged. Strict equivalence (full error messages, 64,908 inputs incl. multi-character and
+  name-boundary mutations under four limit settings) `SAME` in both rounds. Warm-up not extended
+  (it failed before that step).
+- **Measured:** base `0fa3edf` → candidate `0fa3edf`+dirty; workerd 1.20260815.1.
+  r1 quick (`svg,soap,s3-ascii,rss-ascii`; 10 cold / 4 warm): warm svg −14.4% 🟢 (−16.2…−12.0),
+  soap −9.5% 🟢, s3-ascii −4.5% 🟢, rss-ascii −3.9% 🟢; cold all ⚪ (svg −2.8%, soap −0.2%,
+  s3-ascii +1.3%, rss-ascii −13.7% with a ±23 CI).
+  r2 quick (plus sitemap): warm svg −15.4% 🟢 (−16.7…−13.6), soap −11.4% 🟢, sitemap −6.0% 🟢,
+  s3-ascii −6.8% 🟢, rss-ascii −5.0% 🟢; cold svg −2.1%, soap +0.9%, s3-ascii −2.3%,
+  sitemap −3.8% (all ⚪), rss-ascii +12.2% 🟡 inconclusive (−3.8…+32.7).
+  Per tier (`bench:ab`, r2): Ignition +6…+10%, Sparkplug 0…+7%, Maglev −11…−17%,
+  Turbofan −4…−12%.
+  Compile (per-request trace, 3 fresh isolates each): `parseString` bytecode 4,231 → 4,738
+  bytes; Turbofan compile s3-ascii 15.6 → 18.7 ms, svg 25.7 → 29.4 ms; Maglev +0.5…+0.8 ms.
+  Ablations of the +3.1 ms on s3: the three extra `charCodeAt` for the hash ~1.1 ms, attribute
+  prediction ~0.7 ms, slot reset loop ~0.4 ms, the rest ~1 ms.
+  Small documents (`bench:cold`, 40 isolates): rss-small 6.04 → 6.92 ms (+14.6%), s3-small
+  5.54 → 5.96 ms (+7.6%). They never reach Turbofan within 100 parses. Their Maglev compile of
+  `parseString` (rss-small 3.9 → 4.6 ms, s3-small 2.7 → 3.4 ms) is ~65% of their total.
+  No full run (rss-small would be 🔴 or 🟡), no encoding/bytes checks.
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the mechanism works (regex gone from the profiles, warm −5…−15% on all five large
+  fixtures), but it costs 507 bytes of bytecode, and in this parser compile time is paid per
+  byte that runs: ~6 µs per byte in Turbofan, ~1.4 µs in Maglev. Large documents give back most
+  of their warm win as compile, so cold stays within noise. For small documents the Maglev
+  compile is most of `total-100`, so they get slower. The hit path itself also isn't free:
+  the slice + `StringEqual` check costs ~9 ns per start tag, against ~30 ns per NAME_RE test.
+- **Retry if:** the same commit removes at least ~500 bytes of compiled bytecode from
+  `parseString`. The 2026-10-01 comments/PIs outlining (−950 bytes; failed only on a ~2% rss
+  warm loss, which this idea's −5% rss warm more than offsets) is the obvious partner: measure
+  that combination. Or someone finds a cache packaging of under ~150 bytes.
+  Notes for future loops:
+  (1) V8's tick profiler works in local workerd: `--prof --no-logfile-per-isolate
+  --logfile=<path>` in the V8 flags. `node --prof-process` lumps embedded builtins into the
+  workerd binary (47% "shared library"). Instead, attribute each tick's pc to the log's own
+  `code-creation,Builtin,…` entries: that splits warm time into `parseString`, regex code,
+  `RegExpPrototypeTestFast`, `StringSubstring`, `StringIndexOf`, `StringEqual`, and so on. The
+  scripts lived in the session scratchpad and weren't kept.
+  (2) For small documents, `parseString`'s Maglev compile is ~65% of `total-100`. Any bytecode
+  added to `parseString` costs rss-small about 1.4 ms per KB; removing bytecode helps it as much.
+  (3) The attribute-value memo `WS_RE` scans to the end of minified documents once per parse
+  (s3 2.5–3.6% of warm time, soap 1.8%): a possible small target.
