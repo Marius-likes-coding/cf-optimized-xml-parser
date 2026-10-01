@@ -161,7 +161,77 @@ dependency updates remotely too, add the same token as a Dependabot secret.
 
 Locally, `npm run bench:pr:remote` uses your `wrangler login`.
 
-### Calibration (2026-09-30)
+### Calibration of the thread-CPU bench (2026-10-01)
+
+Scripts and raw-data readers: `spikes/precise-bench/` (`aa.mjs`, `analyze.mjs`, `calibrate.mjs`,
+`coverage.mjs`).
+
+**Probe.** Before the harness changed, an A/A probe timed every request both ways on 16 GitHub
+runners (two rounds, all 10 fixtures, 4 processes × 15 isolates per variant each). The spread of
+cold totals between isolates of one process:
+
+| fixture group      | Worker's 1 ms clock |                             thread CPU |
+| ------------------ | ------------------: | -------------------------------------: |
+| 100 KB fixtures    |           6.6–10.6% |                               2.6–3.9% |
+| rss-small (3.5 KB) |                 24% | 10% (21% without the request overhead) |
+
+Differences between workerd processes and between runners added 0–1% on top (mostly ≈0), Azure
+reported no steal time, and pinning to vCPUs 1–3 narrowed the predicted intervals slightly. A
+simulation with that structure (`coverage.mjs`) gives the 99% t-interval 98.9–99.4% coverage.
+
+**A/A runs.** 5 manual runs with `base=HEAD` on 16 runners each (100 gated rows): all ⚪. Cold
+z-scores spread 1.03× as much as the intervals predict and no cold interval excluded 0; warm
+1.10×, one interval excluded 0 (0.5 expected). Largest cold change on a 100 KB fixture: 0.53%.
+Median 99% half-widths:
+
+| check      | 100 KB fixtures      | rss-small |
+| ---------- | -------------------- | --------: |
+| local cold | ±0.52% (±0.30–0.97%) |     ±2.0% |
+| local warm | ±1.64% (±0.68–3.86%) |    ±1.13% |
+
+Each run took 6.6–7.6 minutes, about 5 of them in the shards. Five earlier runs found two flaws,
+fixed since: a fresh workerd process's first isolate runs 2–5% slower (rss-small ~30%), and it
+was a base isolate in every batch, so cold leaned −0.1…−0.5% (rss-ascii −0.5% in all five);
+and warm's percentile bootstrap over 16 isolates was too narrow (z-scores 1.35×). Warm still
+leans slightly on soap (−0.8%) and ooxml (−0.7%), far below its 3% threshold.
+
+**A known slowdown.** A throwaway branch that parses every 33rd document twice: cold +0.8…+1.7%,
+9 of 10 intervals above 0 (the extra parses come after tier-up, so cold grows less than warm);
+warm +0.5…+3.3%, 8 of 10 above 0. Cold changes of about 1–1.5% now show.
+
+**The hardware matters.** Replaying closed PR #54 (`989065a`) against its base, cold
+`total-100`:
+
+| fixture   | CI (13 AMD, 3 Intel runners) | laptop (Intel i9, pinned) |
+| --------- | ---------------------------: | ------------------------: |
+| ooxml     |            −2.8% (−3.2…−2.4) |         −3.9% (−4.8…−3.1) |
+| svg       |            −3.6% (−4.3…−2.9) |         −2.5% (−3.5…−1.6) |
+| rss-ascii |            −2.4% (−3.5…−1.4) |         −1.6% (−3.6…+0.4) |
+| soap      |            +1.0% (+0.0…+2.0) |         −1.7% (−2.6…−0.8) |
+| s3-ascii  |            +2.1% (+1.4…+2.8) |         +0.2% (−0.8…+1.1) |
+| rss-small |            +2.5% (+0.7…+4.2) |         +2.3% (−1.4…+6.2) |
+
+Warm agreed (ooxml −9%, soap −5…−6%, rss −4…−5% in both). Cold effects of 1–3% can differ
+between CPUs by more than the intervals; CI's Intel Xeon runners sided with the AMD ones (s3
++1.7%), so the laptop's mobile CPU is the outlier. CI decides; local runs steer. The old gate
+measured ooxml at −5.3% locally and −2.3% (−4.4…+0.0) in CI; it couldn't see the regressions.
+
+**The laptop.** A local A/A run (pinned to 2 cores, 240 s budget) took about 40 minutes for cold
+±0.9–3% (rss-small ±5%) and warm ±0.6–2%: the CPU's clock speed drifts, so local intervals stay
+2–6× wider than CI's. The budget is 120 s per fixture since.
+
+**Gate (2026-10-01).** Cold 🔴 from 3% and 🟢 from 2% (was 5% and 3%); warm unchanged. All 140
+gated rows of the seven A/A runs above stay ⚪ under these thresholds. A cold win between 2% and
+3% still needs the fixture's warm interval below 0, because code shape alone moves cold totals
+(history below).
+
+### History: the 1 ms clock (before 2026-10-01)
+
+The sections below describe the setup before thread CPU: one machine per fixture, the Worker's
+1 ms clock, bootstrap intervals. Their thresholds and sample sizes are replaced; the findings on
+copy divergence, the warm schedule and the remote check still hold.
+
+#### Calibration (2026-09-30)
 
 A/A runs (base = candidate, same parser code), 99% interval half-widths, with the sample sizes
 before 2026-10-01 (cold 30 isolates per variant, warm 4 isolates):
