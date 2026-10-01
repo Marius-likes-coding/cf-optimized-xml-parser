@@ -924,3 +924,39 @@ paired bench (no intervals) and can't be re-scored.
 - **Retry if:** accepted. Note for future loops: on most fixtures a warm win of ≥5% turns into
   only ≈ a third of that in `total-100`, because compiles and the first ~10 parses don't share
   in it. Combining wins on the same paths is how such ideas clear the 3% gate.
+
+### 2026-10-01: Compile diet — constant startsWith and repeated charCodeAt sites (failed)
+
+- **Hypothesis:** A synthetic function in workerd with 10 `s.startsWith("[CDATA[", i)` sites
+  compiles in 12.5 ms in Turbofan, with 10 `charCodeAt` sites in 3.1 ms. Turbofan inlines a
+  constant `startsWith` as one character read per character, and each read lowers to a loop
+  that Turboshaft unrolls (2026-10-01 diagnostic entry), so one 7-character `startsWith` costs
+  ~1.2 ms of compile. `parseString` runs two (`[CDATA[` on rss and svg, `DOCTYPE` on svg), and
+  `decodeEntities` reads the characters after "&" at 13 sites. Cutting the sites that execute
+  rarely or repeat should save 1–3 ms of compile per fixture, with no warm cost.
+- **Change:** on top of #51, one round: `[CDATA[`/`DOCTYPE` tested with slice + `===`; the
+  byte-order-mark check as `slice(0, 1) === "﻿"`; the comment check's second "-" moved
+  into `markup()`, which fails with the same message at the same offset when it's missing;
+  `decodeEntities` reads the second and third characters once and shares them between the
+  named references and the numeric "x" check (6 read sites instead of 13). `SAME` on 5,427 and
+  64,908 inputs, 200,000 entity documents and 100,000 markup/BOM documents. Reverted; only this
+  log ships.
+- **Measured:** base `5697925` (PR #51) → candidate +dirty; workerd 1.20260815.1. Turbofan compile
+  (2 isolates each): `parseString` rss-ascii 20.2/20.5 → 18.8/18.8 ms, svg 24.5/24.6 →
+  21.9/22.1 ms; `decodeEntities` on entities 6.6/6.8 → 5.3/5.7 ms.
+  Quick (`rss-ascii,svg,entities,rss-crlf,s3-ascii`; 10/4; one disturbed isolate per fixture
+  swung −15…−22%): cold svg −6.1% 🟢, others ⚪.
+  Full (60 cold / 12 warm; absolutes ~10–15% above earlier runs, not degraded enough to repeat):
+  cold all ⚪ — rss-small −5.6% (±17), svg −2.6% (±10), rss-poison −2.7%, soap −2.5%, entities
+  −2.2% (−5.1…+0.6), rss-ascii −2.0%, sitemap −1.3%, s3 −0.5%, rss-crlf +1.0%, ooxml +1.4%;
+  warm all ⚪ within −0.8…+1.0%. No encoding/bytes checks (failed).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the compile saving is real but small: 1–3 ms per isolate, under 3% of `total-100`.
+  A compile-only win needs −5% to count as 🟢. The CDATA check now costs a slice per CDATA
+  section, which offsets a little on rss.
+- **Retry if:** combined with a warm win on the same fixtures (then the 3–5% rule applies), or
+  if more compile-heavy constructs turn up. Notes for future loops: (1) never put a constant
+  `startsWith()`/`endsWith()` on an executed path of a hot function. Each costs ~0.17 ms of
+  Turbofan compile per character; slice + `===` or one `charCodeAt` plus a slice is cheaper to
+  compile. (2) The diff of this round (shared reads in `decodeEntities`, slice-based CDATA/DOCTYPE
+  checks) is a cheap add-on for a later combination.
