@@ -14,8 +14,8 @@
     ],
     "shards": 16,
     "cold": {
-      "thresholdPct": 5,
-      "improvementPct": 3,
+      "thresholdPct": 3,
+      "improvementPct": 2,
       "parses": 100,
       "isolatesPerBatch": 20,
       "batchesPerShard": 2,

@@ -15,10 +15,10 @@ a **base** with a **candidate**:
 Two checks put base and candidate into **one bench Worker** and alternate between them, so
 machine drift and hardware differences hit both alike instead of being compared across runs.
 
-| check         | where                                                                                                 | metrics                                                                                                                                                       | gate              |
-| ------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `perf-local`  | local workerd on 16 runners in parallel, each measuring every fixture (`SHARD=i/16 npm run bench:pr`) | cold: CPU of the first 100 parses in fresh isolates, 640 isolates per variant (rss-small 3,840); warm: time per parse after tier-up, 16 isolates; 10 fixtures | ≥ 5% (🟢 from 3%) |
-| `perf-remote` | 4 real Cloudflare Workers (`npm run bench:pr:remote`)                                                 | warm: CPU per parse, from Cloudflare's own per-request CPU time; 5 fixtures. Pull requests: only with the `perf-remote` label; always on `main`, nightly      | report only       |
+| check         | where                                                                                                 | metrics                                                                                                                                                       | gate                                           |
+| ------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `perf-local`  | local workerd on 16 runners in parallel, each measuring every fixture (`SHARD=i/16 npm run bench:pr`) | cold: CPU of the first 100 parses in fresh isolates, 640 isolates per variant (rss-small 3,840); warm: time per parse after tier-up, 16 isolates; 10 fixtures | cold ≥ 3% (🟢 from 2%), warm ≥ 5% (🟢 from 3%) |
+| `perf-remote` | 4 real Cloudflare Workers (`npm run bench:pr:remote`)                                                 | warm: CPU per parse, from Cloudflare's own per-request CPU time; 5 fixtures. Pull requests: only with the `perf-remote` label; always on `main`, nightly      | report only                                    |
 
 **What runs.** A first job (`scope`) compares the change with its base. If it touches nothing
 the benchmarks measure (`src/`, `scripts/`, `bench/gates.json`, `package.json`, the lockfile,
@@ -29,14 +29,14 @@ benchmark. Otherwise 16 shard runners each measure every fixture, paired as abov
 from all runners and applies the gate; a missing shard report fails it. A shard's own report is
 information only. Nightly and manual runs always measure. A pull request waits about 7 minutes.
 
-A row is a **regression** only when the change reaches the threshold **and** its 99% bootstrap
-confidence interval lies above 0, so noise alone can't fail the check. Other statuses: 🟡
+A row is a **regression** only when the change reaches the threshold (cold 3%, warm 5%) **and**
+its 99% confidence interval lies above 0, so noise alone can't fail the check. Other statuses: 🟡
 inconclusive (over the threshold, not significant), 🟡 slower (significant, at least half the
-threshold), 🟢 faster, ⚪ same. **Faster** has its own, lower threshold (`improvementPct`, 3%):
-the change reaches it and the interval lies below 0. A cold win smaller than the regression
-threshold also needs the same fixture's warm interval below 0; cold-only wins still need 5%
-(see "Gate calibration" below for why). Thresholds, fixtures and sample sizes:
-`bench/gates.json`.
+threshold), 🟢 faster, ⚪ same. **Faster** has its own, lower threshold (`improvementPct`: cold
+2%, warm 3%): the change reaches it and the interval lies below 0. A cold win smaller than the
+cold regression threshold also needs the same fixture's warm interval below 0, because code shape
+alone moves cold totals by a few percent (see the calibration below). Thresholds, fixtures and
+sample sizes: `bench/gates.json`.
 Retained memory is reported too, as information only (see the realism rules).
 
 **Reading the results.** Each pull request gets one comment with both tables, updated on every
@@ -116,7 +116,9 @@ noise. In CI each of the 16 runners runs 2 batches per fixture (rss-small 6). On
 valid.
 
 **Warm** times its bursts the same way (thread CPU minus the isolate's median request without a
-parse). Each runner contributes one isolate; locally 12 isolates run in one process.
+parse). Each runner contributes one isolate; locally 12 isolates run in one process. Each
+isolate's change is the trimmed mean of its round ratios; the row shows their geometric mean with
+a t-interval over isolates (a percentile bootstrap over 16 isolates came out too narrow).
 
 **On your machine.** Pin the run to cores whose hyperthread siblings stay idle, for example
 `taskset -c 4,5 npm run bench:pr` on an 8-core laptop where `cat

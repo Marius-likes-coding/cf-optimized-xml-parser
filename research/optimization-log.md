@@ -48,6 +48,28 @@ paired bench (no intervals) and can't be re-scored.
 
 ## Entries
 
+
+## Precise bench (2026-10-01, branch `ci/precise-bench`)
+
+From this change on, `perf-local` times cold parses by the CPU time of workerd's JavaScript
+thread instead of the Worker's 1 ms clock, and 16 runners each measure every fixture
+(`bench/README.md`, "How the local check measures"). In A/A runs, cold 99% intervals went from
+±2–3.5% to about ±0.3–0.6% (rss-small ±1.4%); a known 1–2% cold slowdown now shows.
+
+What that means for the entries below:
+
+- Their cold numbers came from the 1 ms clock: about ±2–3.5% in CI, wider on the laptop. A
+  "failed" entry with a cold change between −1% and −5% was below what the gate could resolve;
+  it doesn't show that the idea has no effect.
+- Some cold effects depend on the CPU. Replayed on the new bench, the last entry (`989065a`, PR
+  #54) measured in CI (mostly AMD EPYC): ooxml −2.8%, svg −3.6%, rss-ascii −2.4%, but s3-ascii
+  +2.1%, rss-small +2.5%, soap +1.0% (`total-100`; warm faster on 8 of 10 fixtures). On the
+  Intel laptop, soap was −1.7% and s3 +0.2%. CI decides; local runs steer.
+- The "not confirmed" verdict of the last entry stands, for a better reason: the combination
+  trades cold time on s3 and small documents for ooxml, svg and rss. Worth re-measuring one by
+  one before anything else: the compile diet, the short-name windows and the one-attribute
+  literal, to find which part costs s3 and rss-small.
+
 ### 2026-09-30: ASCII fast path for attribute names only (failed)
 
 - **Hypothesis:** Per-attribute-name Unicode `NAME_RE.test()` costs 20–50% in optimized code on
