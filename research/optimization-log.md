@@ -960,3 +960,39 @@ paired bench (no intervals) and can't be re-scored.
   Turbofan compile per character; slice + `===` or one `charCodeAt` plus a slice is cheaper to
   compile. (2) The diff of this round (shared reads in `decodeEntities`, slice-based CDATA/DOCTYPE
   checks) is a cheap add-on for a later combination.
+
+### 2026-10-01: Array literals for small attribute and child lists (failed)
+
+- **Hypothesis:** Earlier warm profiles put `ArrayPrototypeSlice` + `ExtractFastJSArray` at
+  ~10% of soap and ~14% of ooxml. Every element's attribute list and child list is copied out of
+  a scratch array with `slice()`, and in namespaced documents most of those lists are tiny.
+  Counted on the fixtures: one attribute on 1,200 ooxml and 1,201 soap elements; two children on
+  900 ooxml and 350 entities elements, one element child on 302 ooxml elements. For those sizes an
+  array literal allocates inline instead of calling the builtin, so ooxml and soap should gain
+  warm and cold; other documents are neutral.
+- **Change:** `src/parse-string.ts`, two rounds, on top of #51 (now main); reverted, only this
+  log ships.
+  (r1) `[name, value]` for one attribute, `[only]`/`[a, b]` for one or two children (a lone
+  string child stays a string), `slice()` otherwise; warm-up got `<o><m/></o>` for the
+  one-element-child literal, and its test the node.
+  (r2) only the one-attribute literal.
+  Equivalence `SAME` on 64,908 inputs and 160,000 attribute documents (both rounds).
+- **Measured:** base `8e236c8` (src as on main `e0ca77a`+#50+#51); workerd 1.20260815.1.
+  r1 quick (`ooxml-ascii,soap,entities,svg,s3-ascii`; 10/4): cold ooxml −6.0% 🟢; warm ooxml −8.5%,
+  soap −6.5%, entities −3.1% (🟢). r1 full: cold ooxml −6.6% 🟢, soap −3.3% 🟢, but rss-ascii
+  +5.9% 🔴 (+0.5…+12.1) and rss-small +7.4% 🟡 inconclusive; warm ooxml −11.9%, soap −6.2%,
+  entities −4.9% (🟢), but svg +1.5%, s3 +1.6%, sitemap +1.4% (⚪, all isolates positive).
+  r2 quick: cold soap −7.5% 🟢; warm soap −5.8%, ooxml −4.3% (🟢). r2 full: cold all ⚪ (soap
+  −2.9%, −6.0…−0.0; ooxml −1.6%; others −2.8…+3.4%); warm soap −5.9% 🟢, ooxml −4.3% 🟢,
+  entities −2.1%, svg −1.0%, but s3-ascii +1.9% and sitemap +1.7% (all 12 isolates positive).
+  No encoding/bytes checks (failed).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the warm mechanism is real where small lists dominate (ooxml −12% with both literals).
+  But in both rounds, documents without such lists got ~2% slower warm (s3, sitemap; every
+  isolate). That's the codegen effect of a larger `parseString`, not the literals' own cost,
+  since those documents never create them. Cold sees ooxml and soap gain little after compile
+  and the early tiers. r1's 🔴 on rss-ascii cold (+5.9%) had no warm counterpart; probably noise
+  at its ±6% CI, but it blocks either way.
+- **Retry if:** combined with another win for namespaced documents (ooxml, soap), or if the
+  ~2% warm cost on unrelated documents is explained and avoided. The diffs (r1, r2) are
+  small; r2's one-attribute literal is the safer half.
