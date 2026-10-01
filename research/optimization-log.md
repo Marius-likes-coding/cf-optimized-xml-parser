@@ -716,3 +716,35 @@ paired bench (no intervals) and can't be re-scored.
   character without that loop. Notes for future loops: (1) Node's `--turbo-stats` works for
   Turbofan phase timings (workerd's are lost when it's killed); `spikes`-style scripts lived in
   the scratchpad. (2) Compile time doesn't follow bytecode size alone: measure each variant.
+
+### 2026-10-01: Named entities without the ";" search (failed)
+
+- **Hypothesis:** `decodeEntities` searches for ";" with `indexOf` before it looks at the name.
+  The five named references pin the position of ";" (no name character is ";"), so checking
+  the characters and the ";" directly saves one `indexOf` per named reference (~4,500 per parse
+  on entities). Expected: entities warm −6…−8%, sitemap/s3 −2…−4%, entities cold ≈ −3%.
+- **Change:** `src/entities.ts` only, one round: the named references (`amp` first, then `quot`,
+  `lt`/`gt`, `apos`) matched by integer compares including the ";". Only the remaining cases
+  (numeric references, unknown names, a missing ";") take the search and the old checks, in
+  the old order, so the errors are the same. A match never crosses `end`, which is a "<", a quote
+  or the end of the input. Reverted; only this log ships.
+- **Measured:** base `c8a4f82` (src as on main `e0ca77a`) → candidate +dirty; workerd
+  1.20260815.1. Equivalence: `SAME` on 5,427 and 64,908 inputs, and on 200,000 random
+  entity-fragment documents (text, attributes, CDATA; full error messages).
+  `decodeEntities`' Turbofan compile on entities 5.9–6.4 → 6.6 ms; no new deopt.
+  Quick (`entities,sitemap,s3-ascii,rss-ascii,soap`; 10 cold / 4 warm): warm entities −7.2% 🟢,
+  sitemap −4.7% 🟢, s3-ascii −3.7% 🟢, rss-ascii −2.0%, soap −1.2%; cold all ⚪ (entities −1.5%).
+  Full (60 cold / 12 warm): warm entities −6.9% 🟢 (−7.7…−5.4), sitemap −3.0% (−3.6…−2.3),
+  s3-ascii −1.9%, all else within ±1% ⚪; cold entities −0.6% (−3.0…+1.7), sitemap −1.9%
+  (−4.2…+0.2), s3-ascii −1.4%, rss-poison −4.2% (±9), all ⚪, no 🟡/🔴. Memory unchanged.
+  No encoding/bytes checks (failed).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the warm saving is real (one builtin call per entity), but `total-100` sees little of
+  it. On entities, `parseString` reaches Turbofan only at parse ~19 and `decodeEntities` at ~5,
+  so the warm-tier share is smaller than on other fixtures. In Ignition and Sparkplug the four
+  or five `charCodeAt` calls cost about as much as the `indexOf` they replace, and the larger
+  function compiles ~0.5 ms slower.
+- **Retry if:** combined with another `decodeEntities` saving that pays in the first parses. The
+  open item from the 2026-10-01 deopt entry is a candidate: the Maglev deopt at `source.length`
+  in parse 1 (≈0.5–0.7 ms on s3, sitemap and entities). Or if the gate adds an entity-heavy
+  fixture that tiers up early.
