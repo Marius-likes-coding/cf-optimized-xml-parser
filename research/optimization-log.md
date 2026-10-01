@@ -297,3 +297,44 @@ Rejected in the M7 performance pass (2026-09-29, workerd 1.20260815.1, V8 15.1);
   nil-or-capped). Standing rule for future loops, demonstrated twice (here and sitemap +2.8%
   on dead code): never trust a quick-round 🟢/🟡 without a matching warm correlate — the full
   run is the verdict, especially for cold-only movements.
+
+### 2026-09-30: End-tag match via slice + === instead of startsWith (failed)
+
+- **Hypothesis:** Ablation shows the end-tag `startsWith(name, lt + 2)` match is ~16% of s3-ascii
+  and ~11% of sitemap warm. `startsWith` with a position argument looks unintrinsified in V8
+  15.1 (the ablation saving implies ~27 ns/call), while `slice` and string `===` are. Replacing
+  the check with `xml.slice(lt + 2, lt + 2 + name.length) !== name` keeps accept/reject identical
+  (the slice takes exactly `name.length` characters, clamped at end of input exactly like
+  `startsWith`) and should win in all tiers, most on end-tag-dense fixtures (s3, sitemap, soap).
+- **Change:** `src/parse-string.ts` end-tag branch only, one line + comment. No warm-up change
+  (same path). All reverted; only this log ships.
+- **Measured:** base `36ae18f` → candidate `36ae18f`+dirty; workerd 1.20260815.1. Three runs:
+  quick (10 cold / 4 warm; loaded machine, absolutes ~+40%): cold soap −8.9% (−12.3…−3.0) 🟢,
+  s3-ascii −1.6%, sitemap +0.5%, rss-ascii −0.6% all ⚪; warm s3-ascii −3.8%, rss-ascii −2.7%
+  (all 4 isolates negative), soap −1.6% (all negative), sitemap +0.2%.
+  Full #1 (60/12; loaded, absolutes ~+60–100%): everything ⚪ same with wide CIs — cold soap
+  −3.2%, s3-ascii −6.4% (−15.2…+4.1), svg −5.8%, sitemap −4.3%; warm −0.5…−3.0% on 8/10
+  fixtures (s3-ascii −3.0% and rss-crlf −2.6% with CIs below 0 but under the gate).
+  Full #2, clean re-run on an idle machine (load 1.8/16; exactly one repeat for the degraded
+  run, both tables reported): cold ALL 10 fixtures negative — soap −4.8% (−7.1…−2.3), s3-ascii
+  −4.2%, ooxml-ascii −3.9%, rss-crlf −3.7%, rss-ascii −3.4%, svg −3.3% (CI fully below 0),
+  sitemap −2.0%, rss-poison −1.5%, entities −0.8% — but the best is −4.8%, under the 5% gate;
+  warm s3-ascii −3.3%, rss-small −3.1%, soap −3.0% (all 12/12 isolates negative),
+  rss-crlf −2.3%, rss-poison −1.9%, rss-ascii −1.6%, entities −1.0%, sitemap −0.8% — all under
+  the gate; svg +0.7% and ooxml-ascii +1.1% (11–12/12 isolates positive but CIs at/below gate,
+  ⚪ same: the slice allocation costs on long names); memory unchanged.
+  Equiv `SAME` on 5,427 inputs; `typecheck` + `lint` pass. Encoding/bytes checks not run
+  (reverted).
+- **CI:** not opened (no 🟢 in either full run; no perf PR).
+- **Why:** the mechanism is real and broad (10/10 cold rows and 8/10 warm rows negative in the
+  clean run, most with CIs below 0 and 12/12-isolate agreement) — `startsWith` with a position
+  is indeed slower than `slice` + `===` in every tier, more so early (cold wins exceed warm
+  wins). But it caps at −4.8% total-100 (soap), just under the gate: the rest of the end-tag
+  path (whitespace skip, `frames.pop()`, `slice` copy) has nothing left to cut, and no r2
+  packaging can credibly find the missing fraction (a short/long-name hybrid would re-add the
+  per-item branch that killed the 2026-09-30 attribute-names r2).
+- **Retry if:** V8 intrinsifies positional `startsWith` (re-measure: if the gap closes, this
+  whole entry is obsolete), or someone finds the remaining ~0.5% on soap/s3 without new
+  branches. Precedent set here: exactly one documented full re-run is allowed when a run is
+  degraded (2× absolutes), reporting every table — not shopping, since the repeat can (and
+  here did) fail.
