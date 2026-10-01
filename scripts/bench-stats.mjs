@@ -114,19 +114,34 @@ export const STATUS = {
 /**
  * A regression needs both: a change at or above the threshold, and a CI that excludes 0 (so
  * noise alone can't trip the gate). Over the threshold but not significant is "inconclusive";
- * significant and at least half the threshold is "slower"; "faster" mirrors the regression rule.
- * Smaller significant changes show as "same": A/A runs produce those from clock quantization.
+ * significant and at least half the threshold is "slower". "faster" mirrors the regression rule
+ * at `improvementPct` (default: the threshold). Smaller significant changes show as "same": A/A
+ * runs produce those from clock quantization.
  */
-export function classify({ changePct, lowPct, highPct }, thresholdPct) {
+export function classify(
+  { changePct, lowPct, highPct },
+  thresholdPct,
+  improvementPct = thresholdPct,
+) {
   if (lowPct > 0 && changePct >= thresholdPct) return "regression";
-  if (highPct < 0 && changePct <= -thresholdPct) return "faster";
+  if (highPct < 0 && changePct <= -improvementPct) return "faster";
   if (changePct >= thresholdPct) return "inconclusive";
   if (lowPct > 0 && changePct >= thresholdPct / 2) return "slower";
   return "same";
 }
 
 /** Builds a report row and applies the gate. */
-export function row({ metric, fixture, unit, base, cand, stats, thresholdPct, gated }) {
+export function row({
+  metric,
+  fixture,
+  unit,
+  base,
+  cand,
+  stats,
+  thresholdPct,
+  improvementPct = thresholdPct,
+  gated,
+}) {
   return {
     metric,
     fixture,
@@ -135,9 +150,28 @@ export function row({ metric, fixture, unit, base, cand, stats, thresholdPct, ga
     cand,
     ...stats,
     thresholdPct,
+    improvementPct,
     gated,
-    status: classify(stats, thresholdPct),
+    status: classify(stats, thresholdPct, improvementPct),
   };
+}
+
+/**
+ * A cold win below the regression threshold counts as "faster" only if the same fixture's warm
+ * row is faster too (CI below 0, any size); otherwise it shows as "same". Cold CIs miss about 1%
+ * of run-to-run noise (A/A runs, 2026-10-01), and changes in code shape alone move cold totals by
+ * 3–8% without moving warm (bench/README.md, calibration). Cold-only wins still need the
+ * threshold. Mutates and returns `rows`.
+ */
+export function confirmColdWins(rows) {
+  for (const r of rows) {
+    if (r.metric !== "total-100" || r.status !== "faster" || r.changePct <= -r.thresholdPct) {
+      continue;
+    }
+    const warm = rows.find((w) => w.metric === "warm" && w.fixture === r.fixture);
+    if (!(warm?.highPct < 0)) r.status = "same";
+  }
+  return rows;
 }
 
 /** Marks gated regressions as accepted when the PR carries the override label. */
@@ -174,11 +208,17 @@ export function renderReport(report) {
     "",
     `${where} · bench Worker \`${report.bundleHash}\` · regression = change ≥ threshold and ${CONFIDENCE * 100}% CI above 0`,
   ];
+  if (report.rows.some((r) => r.gated && r.improvementPct < r.thresholdPct)) {
+    lines.push(
+      "",
+      `faster = change ≤ −improvement and CI below 0; a cold win smaller than the threshold also needs the fixture's warm CI below 0`,
+    );
+  }
   for (const metric of Object.keys(METRIC_TITLES)) {
     const rows = report.rows.filter((r) => r.metric === metric);
     if (rows.length === 0) continue;
     const gate = rows[0].gated
-      ? `gate ${rows[0].thresholdPct}%`
+      ? `gate ${rows[0].thresholdPct}%${rows[0].improvementPct < rows[0].thresholdPct ? `, faster from ${rows[0].improvementPct}%` : ""}`
       : rows[0].lowPct === undefined
         ? "information only"
         : "report only, not a gate";
