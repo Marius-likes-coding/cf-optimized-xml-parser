@@ -193,7 +193,9 @@ Each run took 6.6–7.6 minutes, about 5 of them in the shards. Five earlier run
 fixed since: a fresh workerd process's first isolate runs 2–5% slower (rss-small ~30%), and it
 was a base isolate in every batch, so cold leaned −0.1…−0.5% (rss-ascii −0.5% in all five);
 and warm's percentile bootstrap over 16 isolates was too narrow (z-scores 1.35×). Warm still
-leans slightly on soap (−0.8%) and ooxml (−0.7%), far below its 3% threshold.
+leans on identical code: soap about −1% on average (−0.5…−2.2%, in nearly every A/A run since
+2026-09-30), ooxml and svg less. That's below warm's 3% threshold, but it can supply the warm
+confirmation a 2–3% cold win on those fixtures needs; the cause isn't known yet.
 
 **A known slowdown.** A throwaway branch that parses every 33rd document twice: cold +0.8…+1.7%,
 9 of 10 intervals above 0 (the extra parses come after tier-up, so cold grows less than warm);
