@@ -185,6 +185,14 @@ if (metrics.has("warm")) {
 
 // After warm, so that cold wins below the threshold can be checked against their warm row.
 confirmColdWins(rows);
+if (sharded) {
+  // One shard sees one machine and one warm isolate, whose two parser copies can settle several
+  // percent apart; the gate applies to the merged report (scripts/bench-merge.mjs) only.
+  for (const r of rows) r.gated = false;
+  notes.push(
+    `Shard ${shard}: report only. The gate applies to the merged report of all shards (perf-local).`,
+  );
+}
 
 if (metrics.has("memory") && gates.memory.report && shardIndex === 1) {
   console.error("memory (lab measurement, not gated)");
