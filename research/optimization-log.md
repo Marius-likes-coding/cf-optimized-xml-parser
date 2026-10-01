@@ -167,3 +167,38 @@ Rejected in the M7 performance pass (2026-09-29, workerd 1.20260815.1, V8 15.1);
   integer compare, so each hit already costs exactly one `startsWith`; reordering only moves
   ~1 ns compares (measured entity frequencies: amp 6,906, quot 3,920, lt/gt 1,400 each,
   numeric 700, apos 0 across the matrix).
+
+### 2026-09-30: Dead-code ablation of the s3-cold compile sensitivity (failed — diagnostic)
+
+- **Hypothesis:** The last three entries all invoke compile size/timing noise to explain cold
+  movements (s3-ascii +5…+8% 🔴 on attribute-names r3, +3.1% 🟡 on the decode split). If cold
+  moves on compile load alone, a never-executed branch of the same size (~25 lines of bytecode
+  inside `parseString`) must move s3-ascii cold with zero execution change. This answers the
+  "Retry if" of all three entries and unblocks future small ideas either way.
+- **Change:** `src/parse-string.ts` only: an `if (maxAttributes < 0)` block (impossible —
+  `limit()` enforces ≥ 1) containing a `charCodeAt` switch loop over the input plus a dead
+  `fail()`. Never executed, never reached by the warm-up (by design), no warm-up change.
+  Equiv trivially `SAME` on 5,427 inputs; `typecheck` + `lint` pass. Reverted; only this log
+  ships.
+- **Measured:** base `86d653e` → candidate `86d653e`+dirty; workerd 1.20260815.1.
+  Quick (`s3-ascii,rss-ascii,svg`; 10 cold / 4 warm): all ⚪ same (s3-ascii cold +1.4%,
+  rss-ascii cold −7.1% with CI spanning ±15, warm ±0.5%).
+  Full (60 cold / 12 warm): warm ALL fixtures ±0.2% (dead code costs exactly nothing warm);
+  cold s3-ascii +0.7% (−0.8…+2.4, tight) ⚪, svg +0.0%, soap −0.5%, ooxml −0.7%,
+  entities −0.3%, rss-ascii −2.8%, rss-poison +2.6%, rss-crlf +1.2% — all ⚪ same;
+  sitemap +2.8% (+0.5…+4.9) 🟡 slower; rss-small +7.9% 🟡 inconclusive (CI spans ±15).
+  Memory unchanged. Encoding/bytes checks not run (diagnostic, reverted).
+- **CI:** not opened (diagnostic, reverted; no perf PR).
+- **Why:** the s3-specific compile-size hypothesis is rejected: +0.7% with a tight CI is
+  neutral, so raw bytecode size inside `parseString` does not move s3-cold. The earlier s3
+  movements were run variance or specific to those changes (a new module-level function, not
+  size). But the run also shows the gate's noise floor landing elsewhere: sitemap cold +2.8%
+  🟡 with a CI fully above 0 on code that provably never executes — compile-timing noise (or
+  run variance) that this fixture happened to catch. And rss-small cold again spans ±15: small
+  fixtures resolve nothing cold.
+- **Retry if:** never for this ablation (question answered). Consequences for future loops:
+  (1) do not blame raw `parseString` size for a cold movement — look for execution effects or
+  re-run first; (2) a lone 🟡 on an unrelated fixture (like sitemap here) is expected noise —
+  re-run before rejecting on it alone; (3) the s3-cold question that remains is narrower: new
+  module-level functions (not inline size) shifting feedback/inlining, still untested — a
+  dead-export ablation could isolate that if it ever blocks again.
