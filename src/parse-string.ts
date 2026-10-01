@@ -183,7 +183,12 @@ export function parseString(
       const node = open.pop();
       if (node === undefined) return fail("end tag without a start tag", xml, lt);
       const name = node.name;
-      if (!xml.startsWith(name, lt + 2)) fail("end tag doesn't match the open element", xml, lt);
+      // Slice + === instead of startsWith(name, position): identical accept/reject (the slice
+      // takes exactly name.length characters, clamped at end of input like startsWith), but
+      // startsWith with a position argument is not intrinsified while slice and string ===
+      // are (ablation: the end-tag match is ~16% of s3-ascii and ~11% of sitemap warm).
+      if (xml.slice(lt + 2, lt + 2 + name.length) !== name)
+        fail("end tag doesn't match the open element", xml, lt);
       let p = lt + 2 + name.length;
       let ch = xml.charCodeAt(p);
       while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = xml.charCodeAt(++p);
