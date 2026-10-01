@@ -38,20 +38,64 @@ export function decodeEntities(
   amp: number,
   mode: number,
 ): string {
+  // Read once per call: the "no further &" branch below runs only at a document's last
+  // reference, so a length read there had no type feedback when Maglev compiled this function
+  // during the first parse, and it deoptimized (s3, sitemap, entities).
+  const length = source.length;
   let out = "";
   let pos = start;
   while (amp < end) {
     out += normalize(source.slice(pos, amp), mode);
-    const semi = source.indexOf(";", amp + 1);
-    if (semi === -1 || semi >= end) fail("unterminated entity reference", source, amp);
-    const size = semi - amp;
-    // First-character dispatch with integer compares instead of startsWith() calls: one call
-    // saved per entity in every tier. Equivalent: size pins the length between "&" and ";", so
-    // matching the remaining characters is exact (out-of-bounds charCodeAt is NaN, like a
-    // failed startsWith). The isXmlChar() range check is likewise inlined: it runs once per
-    // numeric reference and the call overhead shows next to the digit loop.
     const head = source.charCodeAt(amp + 1);
-    if (head === 35) {
+    let semi: number;
+    // Named references pin the position of ";", so they need no indexOf(): no name character is
+    // ";", so the first ";" after "&" is right after the name, as the search would find. `end` is
+    // a "<", a quote or the end of the input, so a match never runs past it. Integer compares,
+    // not startsWith() calls, as for numeric references.
+    if (
+      head === 97 &&
+      source.charCodeAt(amp + 2) === 109 &&
+      source.charCodeAt(amp + 3) === 112 &&
+      source.charCodeAt(amp + 4) === 59
+    ) {
+      out += "&";
+      semi = amp + 4;
+    } else if (
+      head === 113 &&
+      source.charCodeAt(amp + 2) === 117 &&
+      source.charCodeAt(amp + 3) === 111 &&
+      source.charCodeAt(amp + 4) === 116 &&
+      source.charCodeAt(amp + 5) === 59
+    ) {
+      out += '"';
+      semi = amp + 5;
+    } else if (
+      (head === 108 || head === 103) &&
+      source.charCodeAt(amp + 2) === 116 &&
+      source.charCodeAt(amp + 3) === 59
+    ) {
+      out += head === 108 ? "<" : ">";
+      semi = amp + 3;
+    } else if (
+      head === 97 &&
+      source.charCodeAt(amp + 2) === 112 &&
+      source.charCodeAt(amp + 3) === 111 &&
+      source.charCodeAt(amp + 4) === 115 &&
+      source.charCodeAt(amp + 5) === 59
+    ) {
+      out += "'";
+      semi = amp + 5;
+    } else {
+      semi = source.indexOf(";", amp + 1);
+      if (semi === -1 || semi >= end) fail("unterminated entity reference", source, amp);
+      if (head !== 35)
+        fail(
+          "unknown entity (only &lt; &gt; &amp; &quot; &apos; and character references)",
+          source,
+          amp,
+        );
+      // The isXmlChar() range check is inlined: it runs once per numeric reference and the call
+      // overhead shows next to the digit loop.
       const hex = source.charCodeAt(amp + 2) === 120;
       let digit = amp + (hex ? 3 : 2);
       if (digit === semi) fail("empty character reference", source, amp);
@@ -74,40 +118,10 @@ export function decodeEntities(
       ))
         fail("character reference to a character XML forbids", source, amp);
       out += String.fromCodePoint(code);
-    } else if (size === 3 && head === 108 && source.charCodeAt(amp + 2) === 116) out += "<";
-    else if (size === 3 && head === 103 && source.charCodeAt(amp + 2) === 116) out += ">";
-    else if (
-      size === 4 &&
-      head === 97 &&
-      source.charCodeAt(amp + 2) === 109 &&
-      source.charCodeAt(amp + 3) === 112
-    )
-      out += "&";
-    else if (
-      size === 5 &&
-      head === 113 &&
-      source.charCodeAt(amp + 2) === 117 &&
-      source.charCodeAt(amp + 3) === 111 &&
-      source.charCodeAt(amp + 4) === 116
-    )
-      out += '"';
-    else if (
-      size === 5 &&
-      head === 97 &&
-      source.charCodeAt(amp + 2) === 112 &&
-      source.charCodeAt(amp + 3) === 111 &&
-      source.charCodeAt(amp + 4) === 115
-    )
-      out += "'";
-    else
-      fail(
-        "unknown entity (only &lt; &gt; &amp; &quot; &apos; and character references)",
-        source,
-        amp,
-      );
+    }
     pos = semi + 1;
     amp = source.indexOf("&", pos);
-    if (amp === -1) amp = source.length;
+    if (amp === -1) amp = length;
   }
   ampAfter = amp;
   return out + normalize(source.slice(pos, end), mode);

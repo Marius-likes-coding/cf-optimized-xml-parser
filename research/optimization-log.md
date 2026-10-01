@@ -882,3 +882,45 @@ paired bench (no intervals) and can't be re-scored.
   tiers up rarely called functions sooner. Note for future loops: a gated-row 🟡 inconclusive
   on rss-small has appeared in four full runs in a row (+2.5…+8.6%). Pooled `bench:cold`
   (`SAMPLES=75`, four passes) settles it.
+
+### 2026-10-01: Cheaper value decoding — three near-misses combined (accepted)
+
+- **Hypothesis:** Three logged near-misses remove builtin calls from the same work, the decoding
+  of text and attribute values, and their "Retry if" lines ask for exactly this combination:
+  - named entities matched without the `indexOf(";")` (warm entities −6.9%, cold −0.6%);
+  - three `indexOf` memos instead of the `/[\t\n\r]/` attribute-value regex (warm −1…−3%; now
+    7.6% of svg warm time after #50);
+  - `decodeEntities`' Maglev deopt in parse 1 at `source.length` (s3, sitemap, entities; open
+    since the 2026-10-01 deopt entry), fixed by reading the length once at entry.
+  Together they should push entity-heavy fixtures over the gate. Tested on top of #50,
+  `BASE=perf/predicted-attributes-skip-checks`.
+- **Change:** `src/entities.ts`: the named-entity fast path exactly as in its entry, and
+  `const length = source.length` at entry. `src/parse-string.ts`: the `WS_RE` memo replaced by
+  `lineFeed`/`tab`/`cr` memos as in its entry, `tabOrBreak = Math.min(...)`. No new path for the
+  warm-up (block coverage unchanged apart from two plain assignments).
+- **Measured:** base `4345c66` (PR #50) → candidate +dirty; workerd 1.20260815.1. Trace: the
+  `decodeEntities` deopt is gone on s3, sitemap and entities. Equivalence against #50: `SAME` on
+  5,427, 64,908 (full messages), 200,000 entity and 160,000 attribute documents; also against
+  main.
+  Quick (`entities,s3-ascii,sitemap,svg,soap`; 10/4): warm entities −9.6%, s3 −5.5%, sitemap
+  −4.1% (🟢), svg −2.7%, soap −1.7%; cold all ⚪ (−1.2…+1.4%).
+  Full (60 cold / 12 warm): cold entities −3.9% 🟢 (−6.2…−1.7, warm CI below 0), rss-poison
+  −7.2% (±8), s3-ascii −1.6%, svg −1.0%, sitemap +0.3%, soap +0.8%, ooxml +1.2%, rss-ascii
+  +1.8%, rss-small +2.1% (±21), rss-crlf ±0 — all ⚪, no 🟡/🔴. Warm entities −10.6% 🟢
+  (−11.1…−10.1), s3-ascii −5.6% 🟢, sitemap −3.8% 🟢, svg −3.0% 🟢, soap −2.0%, rss-ascii
+  −2.1%, rss-crlf −1.8%, rss-small −1.7%, rss-poison −1.6%, ooxml −1.4% (⚪, all 12 isolates
+  negative on most rows).
+  Encodings: cold s3-cjk −10.3% 🟢 (−13.1…−7.5), rss-cjk −4.7%, rss-latin1 −3.0%, ooxml-cjk
+  −2.4% (⚪); warm s3-cjk −15.2% 🟢, ooxml-cjk −7.6% 🟢, rss-latin1 −2.1%, rss-cjk −1.2%.
+  `src/decode.ts` untouched, so no bytes check. Lint, typecheck, 163 unit tests, fuzz, size
+  (8.75 kB), conformance 1263/1736 = main.
+- **CI:** perf-local watched before merge (stacked on #50, so CI compares against it; required:
+  no 🔴 row and entities total-100 🟢 again); `perf-remote` label not added.
+- **Why:** each part removes one builtin call per value or reference in every tier after the
+  first, and they add up on documents that hit several: entities (references in every text),
+  s3 (`&quot;` in every ETag, minified so the whitespace regex scanned to the end), and two-byte
+  documents, where the regex was slower still (s3-cjk −15% warm). Alone, each stayed under the
+  gate.
+- **Retry if:** accepted. Note for future loops: on most fixtures a warm win of ≥5% turns into
+  only ≈ a third of that in `total-100`, because compiles and the first ~10 parses don't share
+  in it. Combining wins on the same paths is how such ideas clear the 3% gate.
