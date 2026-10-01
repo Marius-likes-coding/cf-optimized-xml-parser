@@ -787,3 +787,43 @@ paired bench (no intervals) and can't be re-scored.
   Note for future loops: GC is 7–11% of `total-100` (scavenges every ~5 parses in a fresh
   isolate). Reducing allocation per parse helps, but the retained tree is fixed by the output
   shape, and the remaining garbage is mostly these check slices.
+
+### 2026-10-01: Attribute loop outside parseString (failed)
+
+- **Hypothesis:** The attribute loop is ~1,000 of `parseString`'s 3,698 bytecode bytes. Documents
+  whose only attribute sits on the root (s3, sitemap, entities) run it once per parse, so its
+  feedback is complete and Turbofan compiles it in full. In its own function, larger than the
+  460-byte inlining limit, those documents would run it in Ignition/Sparkplug, and
+  `parseString` would compile ~30% faster. Attribute-heavy documents would compile it
+  separately at a similar total cost, plus one call per element with attributes.
+  Two other ideas were measured for compile time while choosing this one, both without effect.
+  (1) Rarely used values (`maxDepth`, `maxAttributes`, `maxNameLength`, `bom`, `seenDoctype`)
+  moved from locals to module scope, against register-allocation time. Node `--turbo-stats`:
+  s3 18.0–18.1 → 18.2–18.5 ms, svg 22.8–22.9 → 23.5–23.7 ms.
+  (2) The `charCodeAt`-site work in the 2026-10-01 diagnostic entry above.
+- **Change:** `src/parse-string.ts` only, one round: `attributes(xml, p, ch, predicted, lt,
+  maxAttributes, maxNameLength, amp)` (1,005 bytecode bytes) holds the loop verbatim. It is
+  called when the character after the name isn't ">" or "/", and reports the end position, the
+  next character, the "&" memo and an attribute-miss flag in module-level variables;
+  `tabOrBreak` moved to module scope, reset per parse. `parseString` 3,698 → 2,520 bytes. `SAME` on
+  5,427 and 64,908 inputs. Reverted; only this log ships.
+- **Measured:** base `e0ca77a`; workerd 1.20260815.1.
+  Trace (one fresh isolate each): `parseString` Turbofan compile s3 15.1 → 11.1 ms, sitemap
+  15.0 → 10.8, soap 15.3 → 10.2, ooxml 16.9 → 11.7, rss 19.5 → 15.0, svg 24 → 18.6. Maglev
+  −0.8…−1.0 ms; rss-small Maglev 3.6 → 2.6. On svg `parseString` now tiers up much later (Maglev
+  #12, Turbofan #25). `attributes()` compiles in ~5.5 ms Turbofan where attributes are dense,
+  and on soap and ooxml it deoptimizes once in Maglev at parse 2 ("insufficient type
+  feedback"): its first compile, during parse 1, comes before the name cache's predictions run.
+  Quick (`s3-ascii,sitemap,svg,soap,rss-ascii,ooxml-ascii`; 10 cold / 4 warm): warm svg +6.0%
+  🔴 (+4.4…+8.5), soap +5.2% 🔴, ooxml-ascii +3.9% 🟡 slower, rss-ascii +1.8%, s3 +1.8%, sitemap
+  +0.5%; cold sitemap −9.0% (−15.3…+0.7), s3 −4.6%, ooxml −0.4%, soap +0.5%, svg +3.7%,
+  rss-ascii +12.6% (🟡 inconclusive, ±24). No full run.
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the compile saving is real, but each element with attributes pays a call with eight
+  arguments and four module-level results (~25–30 ns). On svg, soap and ooxml that's 4–6% of
+  warm time, and their cold totals don't gain because the compile only moves to the new
+  function.
+- **Retry if:** the call can be made nearly free. For example, a version that passes and returns
+  almost nothing: parse state in one reused object, end position as the return value. Or if
+  the gate weighs attribute-light documents more. The compile numbers above give the upside:
+  about −4 ms of Turbofan compile per isolate on s3 and sitemap.
