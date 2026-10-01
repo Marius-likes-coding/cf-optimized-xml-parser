@@ -49,6 +49,8 @@ function limit(value: number | undefined, fallback: number, name: string): numbe
  * otherwise; invalid byte sequences throw. Strings in the result are slices of the (decoded)
  * input: keep the result only as long as the input may stay in memory (typically one request).
  */
+let calls = 0;
+
 export function parse(
   input: string | ArrayBufferView | ArrayBuffer,
   options?: ParseOptions,
@@ -63,6 +65,8 @@ export function parse(
   const maxAttributes = limit(options?.maxAttributes, 200, "maxAttributes");
   const maxNameLength = limit(options?.maxNameLength, 1000, "maxNameLength");
   try {
+    // Calibration only (never merged): every 33rd call parses twice, about +3% warm.
+    if (++calls % 33 === 0) parseString(xml, maxDepth, maxAttributes, maxNameLength);
     return parseString(xml, maxDepth, maxAttributes, maxNameLength);
   } catch (error) {
     resetParser();
