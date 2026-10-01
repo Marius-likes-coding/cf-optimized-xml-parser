@@ -748,3 +748,42 @@ paired bench (no intervals) and can't be re-scored.
   open item from the 2026-10-01 deopt entry is a candidate: the Maglev deopt at `source.length`
   in parse 1 (≈0.5–0.7 ms on s3, sitemap and entities). Or if the gate adds an entity-heavy
   fixture that tiers up early.
+
+### 2026-10-01: Name checks without slices (failed)
+
+- **Hypothesis:** A per-request `--trace-gc` shows scavenges taking 7–11% of `total-100` (100
+  cold parses: s3-ascii 19 scavenges, 6.8 ms; soap 20, 7.9 ms; svg 22, 7.7 ms; rss-ascii 13,
+  4.0 ms). Part of the allocation is garbage: every name check slices a temporary string only to
+  compare it (end tags, name-cache hits, predicted attribute names). An ablation without those
+  three checks (not equivalent, one isolate each) cut `total-100` ~15% (s3 66 → 56 ms, svg
+  106 → 90) and scavenges by a quarter (s3 19 → 14, svg 21 → 16), so most of the cost is the
+  checks' own work (two builtin calls each), not GC. Checks without a slice should recover part
+  of it.
+- **Change:** `src/parse-string.ts`, two variants, reverted; only this log ships.
+  (v1) end tag compared in place: a `charCodeAt` loop over the open element's name instead of
+  slice + `===`. (v2) the name cache stores the four characters after "<" of each cached start
+  tag in two `Int32Array`s (two UTF-16 code units per int, zeroed with the slot). A start tag
+  with an equal window and a name of up to four characters is then checked without a slice
+  (window plus the delimiter after the name); longer names still slice. Both `SAME` on 64,908
+  inputs.
+- **Measured:** base `e0ca77a`; workerd 1.20260815.1.
+  v1 `bench:ab` (1 ms clock, ±3%): Sparkplug s3 +35%, sitemap +33%, rss +25%; Maglev s3 +25%,
+  sitemap +6%; Turbofan ±0 except sitemap −11%; Turbofan compile s3 15.1 → 16.2 ms. Stopped
+  there.
+  v2 `bench:ab`: Ignition +2…+5%, Sparkplug 0…+6%, Maglev −13…+1%, Turbofan −6…+8%; compile s3
+  15.1 → 15.8 ms. v2 quick (`s3-ascii,sitemap,rss-ascii,ooxml-ascii,svg`; 10 cold / 4 warm):
+  warm rss-ascii −3.5% 🟢, ooxml-ascii −3.7% 🟢, svg −1.8%, s3-ascii −1.1%, sitemap −0.1%; cold
+  all ⚪ (s3 −7.2% ±10, sitemap −2.5%, ooxml −0.9%, svg +0.3%). No full run.
+  Also measured: a synthetic with 40 `codePointAt` sites compiles in 24.2 ms (40 `charCodeAt`:
+  11.7 ms), so swapping the read primitive makes compile worse.
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** in Ignition and Sparkplug a `charCodeAt` is a builtin call, so a per-character loop
+  costs far more than the two builtin calls of slice + `===`. Maglev is in between, and
+  Turbofan gains nothing. The window check avoids the calls only for names of up to four
+  characters, and it adds packing, two typed-array loads and stores to every start tag, so
+  the early tiers lose what the warm tier gains.
+- **Retry if:** V8 makes positional `startsWith` (or another non-allocating substring compare)
+  as cheap as slice + `===` in all tiers. Then the checks would stop allocating at no cost.
+  Note for future loops: GC is 7–11% of `total-100` (scavenges every ~5 parses in a fresh
+  isolate). Reducing allocation per parse helps, but the retained tree is fixed by the output
+  shape, and the remaining garbage is mostly these check slices.
