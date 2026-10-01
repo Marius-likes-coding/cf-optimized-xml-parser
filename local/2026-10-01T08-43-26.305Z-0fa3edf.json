@@ -1,0 +1,637 @@
+{
+  "kind": "local",
+  "timestamp": "2026-10-01T08:39:32.195Z",
+  "base": {
+    "ref": "v2.0.3",
+    "sha": "a2c6f26",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/.bench/base/src/index.ts"
+  },
+  "candidate": {
+    "ref": "working tree",
+    "sha": "0fa3edf",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/src/index.ts"
+  },
+  "shard": null,
+  "fixtures": [
+    "rss-ascii",
+    "soap",
+    "rss-poison",
+    "s3-ascii",
+    "rss-small",
+    "ooxml-ascii",
+    "rss-crlf",
+    "sitemap",
+    "svg",
+    "entities"
+  ],
+  "cpu": "AMD EPYC 7763 64-Core Processor | AMD EPYC 9V74 80-Core Processor",
+  "bundleHash": "df051ea483ee, eebe28001f53",
+  "coldBundleHash": "6e47d256f306",
+  "workerd": "1.20260815.1",
+  "flags": "--no-concurrent-recompilation --no-concurrent-sparkplug --no-maglev-build-code-on-background --no-maglev-deopt-data-on-background --no-lazy-compile-dispatcher --no-parallel-compile-tasks-for-eager-toplevel --no-parallel-compile-tasks-for-lazy",
+  "compatibilityDate": "2026-08-01",
+  "rows": [
+    {
+      "metric": "total-100",
+      "fixture": "rss-ascii",
+      "unit": "ms",
+      "base": 62.52777777777778,
+      "cand": 61.94444444444444,
+      "changePct": -0.9329187027987573,
+      "lowPct": -4.728850325379597,
+      "highPct": 3.076923076923088,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 113798,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.65,
+          "early": 1.4703703703703703,
+          "later": 0.5238888888888888
+        },
+        "cand": {
+          "first": 2.45,
+          "early": 1.4277777777777778,
+          "later": 0.529074074074074
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-poison",
+      "unit": "ms",
+      "base": 67,
+      "cand": 66.05555555555556,
+      "changePct": -1.4096185737976774,
+      "lowPct": -4.018040180401816,
+      "highPct": 1.299790356394137,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 113798,
+        "twoByte": true
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.566666666666667,
+          "early": 1.4759259259259259,
+          "later": 0.5727777777777778
+        },
+        "cand": {
+          "first": 2.55,
+          "early": 1.4185185185185185,
+          "later": 0.5672222222222222
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-small",
+      "unit": "ms",
+      "base": 7.833333333333333,
+      "cand": 8.13888888888889,
+      "changePct": 3.900709219858167,
+      "lowPct": -7.973421926910296,
+      "highPct": 16.412213740458004,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 3478,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 1.2833333333333334,
+          "early": 0.48333333333333334,
+          "later": 0.027777777777777776
+        },
+        "cand": {
+          "first": 1.2,
+          "early": 0.45925925925925926,
+          "later": 0.030740740740740742
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-crlf",
+      "unit": "ms",
+      "base": 61.166666666666664,
+      "cand": 60.97222222222222,
+      "changePct": -0.31789282470481295,
+      "lowPct": -3.9892424921559866,
+      "highPct": 3.6557149467838945,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 115158,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.3833333333333333,
+          "early": 1.3777777777777778,
+          "later": 0.5272222222222223
+        },
+        "cand": {
+          "first": 2.3666666666666667,
+          "early": 1.3592592592592592,
+          "later": 0.5316666666666666
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "svg",
+      "unit": "ms",
+      "base": 112.86111111111111,
+      "cand": 114.5,
+      "changePct": 1.4521289687423167,
+      "lowPct": -0.8776206728425162,
+      "highPct": 4.052384482332583,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 135212,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 6.116666666666666,
+          "early": 5.151851851851852,
+          "later": 0.6866666666666666
+        },
+        "cand": {
+          "first": 6.016666666666667,
+          "early": 5.155555555555556,
+          "later": 0.7042592592592593
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "soap",
+      "unit": "ms",
+      "base": 71.47222222222223,
+      "cand": 70.44444444444444,
+      "changePct": -1.4380101049358829,
+      "lowPct": -4.1127189642041095,
+      "highPct": 1.1820330969267046,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 107370,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.6333333333333333,
+          "early": 3.251851851851852,
+          "later": 0.42907407407407405
+        },
+        "cand": {
+          "first": 3.533333333333333,
+          "early": 3.259259259259259,
+          "later": 0.4187037037037037
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "s3-ascii",
+      "unit": "ms",
+      "base": 61.416666666666664,
+      "cand": 61.361111111111114,
+      "changePct": -0.09045680687470581,
+      "lowPct": -2.3444544634806275,
+      "highPct": 2.2405121170553377,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 101228,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.283333333333333,
+          "early": 2.9,
+          "later": 0.35518518518518516
+        },
+        "cand": {
+          "first": 3.3833333333333333,
+          "early": 2.890740740740741,
+          "later": 0.35444444444444445
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "ooxml-ascii",
+      "unit": "ms",
+      "base": 79.63888888888889,
+      "cand": 80.27777777777777,
+      "changePct": 0.8022322985699271,
+      "lowPct": -1.7123287671232834,
+      "highPct": 3.057234269463205,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 86940,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.6666666666666665,
+          "early": 3.433333333333333,
+          "later": 0.5075925925925926
+        },
+        "cand": {
+          "first": 3.783333333333333,
+          "early": 3.3925925925925924,
+          "later": 0.5112962962962962
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "sitemap",
+      "unit": "ms",
+      "base": 69.80555555555556,
+      "cand": 68.63888888888889,
+      "changePct": -1.6713091922005652,
+      "lowPct": -3.6628593934619813,
+      "highPct": 0.1205787781350498,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 106090,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.8666666666666667,
+          "early": 3.111111111111111,
+          "later": 0.4235185185185185
+        },
+        "cand": {
+          "first": 3.7666666666666666,
+          "early": 3.064814814814815,
+          "later": 0.41685185185185186
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "entities",
+      "unit": "ms",
+      "base": 82.80555555555556,
+      "cand": 81.19444444444444,
+      "changePct": -1.9456558201945695,
+      "lowPct": -4.11413404114136,
+      "highPct": 0.3760683760683836,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 124824,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.283333333333333,
+          "early": 2.438888888888889,
+          "later": 0.6414814814814814
+        },
+        "cand": {
+          "first": 3.3333333333333335,
+          "early": 2.435185185185185,
+          "later": 0.6209259259259259
+        }
+      }
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-ascii",
+      "unit": "µs",
+      "base": 224.26541169672814,
+      "cand": 226.44327380293487,
+      "changePct": 1.1665796038258014,
+      "lowPct": -3.75408459885902,
+      "highPct": 5.54697651166125,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "+4.7 / -2.1 / -8.5 / -2.1 / +5.6 / -4.7 / +9.2 / +3.2 / +8.1 / -1.0 / +3.1 / -0.1"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-poison",
+      "unit": "µs",
+      "base": 275.40429673588153,
+      "cand": 269.01327030440257,
+      "changePct": -2.165428914374723,
+      "lowPct": -7.807576136470495,
+      "highPct": 2.8289087530171564,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "+5.6 / -2.6 / +4.8 / -18.3 / -5.2 / -6.1 / +8.0 / -2.9 / -1.1 / -1.6 / +1.2 / -5.0"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-small",
+      "unit": "µs",
+      "base": 8.293872859433574,
+      "cand": 8.2447115553964,
+      "changePct": -0.5285295133279799,
+      "lowPct": -5.003488499501707,
+      "highPct": 3.7043235101201333,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "+6.3 / -12.4 / +5.2 / +2.1 / +2.3 / -2.6 / +1.5 / -3.3 / -3.9 / -2.1 / -0.5 / +2.6"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-crlf",
+      "unit": "µs",
+      "base": 213.34317231967484,
+      "cand": 213.6365521437028,
+      "changePct": -0.6361853193198819,
+      "lowPct": -5.006012380594537,
+      "highPct": 3.970984198410177,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "+2.5 / -4.4 / -3.8 / +2.9 / +2.1 / +4.1 / -6.0 / -3.5 / -6.4 / +0.9 / -5.9 / +11.4"
+    },
+    {
+      "metric": "warm",
+      "fixture": "svg",
+      "unit": "µs",
+      "base": 660.0974911851766,
+      "cand": 659.8258710700899,
+      "changePct": 0.05579630112759748,
+      "lowPct": -2.077470594323727,
+      "highPct": 1.8353283889978256,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "-1.3 / -0.8 / +3.7 / -2.6 / +1.8 / -0.8 / +0.3 / -1.3 / -0.5 / +0.8 / +0.6 / +0.8"
+    },
+    {
+      "metric": "warm",
+      "fixture": "soap",
+      "unit": "µs",
+      "base": 415.0368553880885,
+      "cand": 415.36060711365513,
+      "changePct": 0.025369345784520547,
+      "lowPct": -2.5474044341699087,
+      "highPct": 2.6190371166949777,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "+6.3 / -2.5 / -5.4 / +0.7 / +0.4 / +0.3 / +0.2 / +5.6 / +0.5 / -0.3 / +0.3 / -5.2"
+    },
+    {
+      "metric": "warm",
+      "fixture": "s3-ascii",
+      "unit": "µs",
+      "base": 296.437572982415,
+      "cand": 296.0050299539013,
+      "changePct": -0.12066232077573291,
+      "lowPct": -1.5070435690262673,
+      "highPct": 1.018524706223367,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "-0.8 / +0.2 / -0.6 / -2.9 / +0.1 / +0.6 / -0.6 / +0.3 / -0.4 / +3.1 / -0.1 / -0.2"
+    },
+    {
+      "metric": "warm",
+      "fixture": "ooxml-ascii",
+      "unit": "µs",
+      "base": 468.5963876425651,
+      "cand": 464.19029912503294,
+      "changePct": -0.9195727915460306,
+      "lowPct": -4.547382263742749,
+      "highPct": 2.7839946898239765,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "+4.5 / -8.8 / +5.2 / +2.0 / -4.4 / +5.6 / -2.7 / -5.4 / -3.3 / -3.2 / -5.1 / +5.8"
+    },
+    {
+      "metric": "warm",
+      "fixture": "sitemap",
+      "unit": "µs",
+      "base": 365.44479281954074,
+      "cand": 366.4630226750869,
+      "changePct": 0.32977047752817956,
+      "lowPct": -0.7485859474541168,
+      "highPct": 1.3610131915330115,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "+1.1 / +0.1 / +0.2 / -0.5 / -0.1 / +1.6 / -1.4 / +1.2 / +0.4 / +1.7 / -0.7 / +0.5"
+    },
+    {
+      "metric": "warm",
+      "fixture": "entities",
+      "unit": "µs",
+      "base": 421.39056566251537,
+      "cand": 415.1639903870279,
+      "changePct": -1.465677577759117,
+      "lowPct": -3.0360655585781826,
+      "highPct": 0.17070594094503733,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "-2.2 / +1.3 / -1.8 / -1.8 / -3.3 / -1.4 / -0.9 / +1.4 / -4.7 / -3.4 / -3.0 / +2.6"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-ascii",
+      "unit": "KB",
+      "base": 106.25390625,
+      "cand": 103.8984375,
+      "changePct": -2.21683026359325,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-poison",
+      "unit": "KB",
+      "base": 106.40625,
+      "cand": 104.015625,
+      "changePct": -2.2466960352422904,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-small",
+      "unit": "KB",
+      "base": 5.94140625,
+      "cand": 3.5859375,
+      "changePct": -39.64497041420118,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-crlf",
+      "unit": "KB",
+      "base": 106.25390625,
+      "cand": 103.8984375,
+      "changePct": -2.21683026359325,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "svg",
+      "unit": "KB",
+      "base": 333.40234375,
+      "cand": 331.046875,
+      "changePct": -0.7064943585898265,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "soap",
+      "unit": "KB",
+      "base": 271.0078125,
+      "cand": 271.0078125,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "s3-ascii",
+      "unit": "KB",
+      "base": 175.44921875,
+      "cand": 175.41796875,
+      "changePct": -0.01781142157408766,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "ooxml-ascii",
+      "unit": "KB",
+      "base": 313.421875,
+      "cand": 313.515625,
+      "changePct": 0.029911760307088642,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "sitemap",
+      "unit": "KB",
+      "base": 269.71484375,
+      "cand": 269.71484375,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "entities",
+      "unit": "KB",
+      "base": 302.2578125,
+      "cand": 302.3515625,
+      "changePct": 0.031016568016739576,
+      "gated": false,
+      "status": "info"
+    }
+  ],
+  "notes": [
+    "Measured on 5 runners in parallel, each fixture's base and candidate on the same one (AMD EPYC 7763 64-Core Processor; AMD EPYC 9V74 80-Core Processor)."
+  ],
+  "accepted": false,
+  "regressions": 0,
+  "shards": [
+    {
+      "shard": "1/5",
+      "fixtures": [
+        "rss-ascii",
+        "soap"
+      ],
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "bundleHash": "df051ea483ee, eebe28001f53"
+    },
+    {
+      "shard": "2/5",
+      "fixtures": [
+        "rss-poison",
+        "s3-ascii"
+      ],
+      "cpu": "AMD EPYC 9V74 80-Core Processor",
+      "bundleHash": "df051ea483ee, eebe28001f53"
+    },
+    {
+      "shard": "3/5",
+      "fixtures": [
+        "rss-small",
+        "ooxml-ascii"
+      ],
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "bundleHash": "df051ea483ee, eebe28001f53"
+    },
+    {
+      "shard": "4/5",
+      "fixtures": [
+        "rss-crlf",
+        "sitemap"
+      ],
+      "cpu": "AMD EPYC 9V74 80-Core Processor",
+      "bundleHash": "df051ea483ee, eebe28001f53"
+    },
+    {
+      "shard": "5/5",
+      "fixtures": [
+        "svg",
+        "entities"
+      ],
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "bundleHash": "df051ea483ee, eebe28001f53"
+    }
+  ]
+}
