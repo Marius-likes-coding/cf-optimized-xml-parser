@@ -590,3 +590,66 @@ paired bench (no intervals) and can't be re-scored.
   added to `parseString` costs rss-small about 1.4 ms per KB; removing bytecode helps it as much.
   (3) The attribute-value memo `WS_RE` scans to the end of minified documents once per parse
   (s3 2.5–3.6% of warm time, soap 1.8%): a possible small target.
+
+### 2026-10-01: Name cache, paid for by moving comments and PIs out of parseString (accepted)
+
+- **Hypothesis:** The previous two entries are near-misses that fail for opposite reasons. The
+  name cache cuts warm time 5–15%, but its 507 bytecode bytes cost as much compile as it saves.
+  Moving comments and PIs out (−950 bytes) saves 3–8 ms of compile but cost rss ~2% warm. Together
+  `parseString` ends up smaller than on main, so compile time goes down while the cache's warm
+  win stays, and the warm win covers the outlining's rss loss. Every fixture should improve in
+  `total-100`, small documents shouldn't get slower, and retained memory should drop: repeated
+  names become one shared string.
+- **Change:** `src/parse-string.ts`: the name cache exactly as in r2 of the name-cache entry,
+  plus `markup()` (834 bytecode bytes, over Turbofan's 460-byte inlining limit) holding the
+  comment and PI branches verbatim (declaration check included). It returns the node, or null
+  for the declaration, and reports the end position and the `\r` memo in two module-level
+  numbers. `parseString` calls it from one site (`c === 63` or `<!--`), ahead of the
+  CDATA/DOCTYPE branch: 4,231 → 3,698 bytecode bytes. `src/warmup.ts`: repeated `<v>`, `<c>` and
+  `<abcd>` start tags, so the warm-up runs every hit and miss kind of both caches (counted with
+  an instrumented copy: element hit, empty slot, delimiter miss, slice miss; attribute hit after
+  `=` and after whitespace, no prediction, past the list, delimiter miss, slice miss). Block
+  coverage leaves the same plain assignments unrun as on main. `test/unit/warmup.test.ts`
+  asserts the added nodes. `test/unit/strict.test.ts` has three new tests: repeated, extended
+  and reordered names; rejection after a repeated name; and a cache emptied after a parse and
+  after an error.
+- **Measured:** base `0fa3edf` → candidate `adefaf3`+dirty (src as on main); workerd 1.20260815.1.
+  Trace (one fresh isolate each, ms): Turbofan compile of `parseString` rss-ascii 21–25 → 19.3,
+  svg 26–31 → 24.0, soap 15.9 → 15.3, s3-ascii 15.6 → 14.9, sitemap 17.6 → 15.1, entities
+  16.3 → 14.7, ooxml-ascii 16.0 → 16.9; Maglev rss-small 3.9 → 3.6, s3-small 2.7 → 2.8. No new
+  deopt. `markup()` stays in Ignition/Sparkplug within 100 parses.
+  Quick (`rss-ascii,rss-small,rss-latin1,svg,s3-ascii,soap`; 10 cold / 4 warm): cold svg −17.2%
+  🟢, s3-ascii −7.7% 🟢, soap −4.4%, rss-latin1 −12.5%, rss-small −2.7%, rss-ascii +0.3% (⚪);
+  warm svg −16.6%, soap −12.5%, s3-ascii −10.5%, rss-latin1 −7.9%, rss-ascii −7.2% (🟢),
+  rss-small −0.9% ⚪.
+  Full (60 cold / 12 warm; load 0.7, absolutes as in the quick round):
+  cold svg −15.1% 🟢 (−17.0…−13.3), rss-ascii −8.5% 🟢 (−15.0…−1.5), rss-crlf −7.0% 🟢,
+  s3-ascii −7.0% 🟢, ooxml-ascii −7.0% 🟢, soap −5.5% 🟢 (−7.5…−3.3), sitemap −3.9% 🟢
+  (−6.4…−1.0, warm CI below 0), rss-poison −3.2% ⚪, entities +0.3% ⚪ (−1.9…+2.5),
+  rss-small +2.5% ⚪ (−9.3…+15.9); no 🟡/🔴.
+  Warm: svg −16.5%, rss-poison −15.3%, soap −12.8%, ooxml-ascii −11.4%, s3-ascii −9.9%,
+  sitemap −7.9%, rss-crlf −7.8%, rss-ascii −6.2%, entities −3.5% (all 🟢, all 12 isolates
+  negative), rss-small −1.0% ⚪.
+  Retained tree: −8.6% (entities) to −33.8% (svg, 331 → 219 KB, now below txml's 272 KB);
+  rss −25…−27%, soap −29%, ooxml −30%, s3 −26%, sitemap −21%.
+  Encodings (`rss-latin1,rss-cjk,ooxml-cjk,s3-cjk`): cold rss-latin1 −7.0%, rss-cjk −8.6%,
+  ooxml-cjk −14.3%, s3-cjk −4.6% (all 🟢); warm −5.7%, −14.9%, −18.2%, −13.8% (all 🟢); memory
+  −25…−30%. `src/decode.ts` and byte input untouched, so no bytes check.
+  Equiv `SAME` on 5,427 inputs, and on 64,908 inputs with full error messages and limits;
+  lint, typecheck, 160 unit tests, fuzz (20,000 inputs), size (8.69 kB brotlied), conformance
+  1263/1736 = main.
+- **CI:** perf-local watched before merge (required: no 🔴 row and at least one of the local 🟢
+  total-100 rows 🟢 again); `perf-remote` label not added (report-only).
+- **Why:** the two parts trade compile size against warm speed and add up as predicted.
+  `parseString` compiles faster than on main (−0.5…−6 ms Turbofan) and runs 4–17% faster warm,
+  because most names skip the NAME_RE call (~30 ns each) for a slice + `===` (~9 ns). rss's warm
+  loss from outlining disappeared. Either the cache's gain hides it, or it was a layout effect of
+  that build of `parseString`. entities gains least: it has few distinct names, and its time is
+  entity decoding. Memory drops because a repeated name is stored once instead of as one
+  string per node (short slices are copies in V8).
+- **Retry if:** accepted. Lessons for future loops: (1) in this parser, compile size and warm
+  speed can be traded against each other. An idea that only fails on compile cost can be paired
+  with an outlining that removes as many bytecode bytes; measure the bytecode length
+  (`spikes/s5/bytecode.mjs` with `FILTER=parseString`) and the per-request compile times. (2)
+  The cache's key is the four characters after "<", so prefixed names (`w:p`, `m:Order`) still
+  separate; with two characters, ooxml and soap hit almost never (simulated).

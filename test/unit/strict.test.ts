@@ -122,3 +122,38 @@ describe("limits", () => {
     }
   });
 });
+
+// parseString caches recent names (by the four characters after "<") and predicts attribute
+// names from the cached element; a hit must never accept what NAME_RE would reject.
+describe("repeated names", () => {
+  it("parses names that extend, differ from or reorder earlier ones", () => {
+    const doc = parse(
+      '<r><item a="1" b="2"/><item a="1" b="2"/><items a="1"/><itemx a="1"/>' +
+        '<item a="1" bb="2" c="3"/><item b="2" a="1"/><item/><item\n/></r>',
+    );
+    expect(doc.root.children).toEqual([
+      { name: "item", attrs: ["a", "1", "b", "2"], children: null },
+      { name: "item", attrs: ["a", "1", "b", "2"], children: null },
+      { name: "items", attrs: ["a", "1"], children: null },
+      { name: "itemx", attrs: ["a", "1"], children: null },
+      { name: "item", attrs: ["a", "1", "bb", "2", "c", "3"], children: null },
+      { name: "item", attrs: ["b", "2", "a", "1"], children: null },
+      { name: "item", attrs: null, children: null },
+      { name: "item", attrs: null, children: null },
+    ]);
+  });
+
+  it("still rejects bad names and duplicates after a repeated name", () => {
+    expect(() => parse("<r><item/><item$/></r>")).toThrow(/invalid character in element name/);
+    expect(() => parse('<r><e x="1"/><e x$="1"/></r>')).toThrow(XmlError);
+    expect(() => parse('<r><e x="1" y="2"/><e x="1" x="2"/></r>')).toThrow(/duplicate attribute/);
+    expect(() => parse("<r><a/><></r>")).toThrow(/invalid or missing element name/);
+  });
+
+  it("forgets names at the end of a parse, also after an error", () => {
+    expect(() => parse("<r><abcdef/></r>")).not.toThrow();
+    expect(() => parse("<r><abcdef/></r>", { maxNameLength: 5 })).toThrow(/maxNameLength/);
+    expect(() => parse('<r><abcdef x="1"/><x')).toThrow(XmlError);
+    expect(() => parse('<abcdef x="1"/>', { maxNameLength: 5 })).toThrow(/maxNameLength/);
+  });
+});
