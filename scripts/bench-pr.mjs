@@ -21,6 +21,7 @@ import {
   candidateInfo,
   change,
   COMPATIBILITY_DATE,
+  confirmColdWins,
   finalize,
   GATES,
   isolateChange,
@@ -90,6 +91,7 @@ if (metrics.has("cold")) {
         cand: trimmedMean(byKey.cand.totals),
         stats: change([byKey.base.totals, byKey.cand.totals], ratioOfTrimmedMeans),
         thresholdPct: gates.cold.thresholdPct,
+        improvementPct: gates.cold.improvementPct,
         gated: true,
       }),
     );
@@ -128,6 +130,7 @@ if (metrics.has("warm")) {
         cand: mean(perIsolate.map((samples) => trimmedMean(samples.cand))),
         stats,
         thresholdPct: gates.warm.thresholdPct,
+        improvementPct: gates.warm.improvementPct,
         gated: true,
       }),
       detail: perIsolatePct
@@ -136,6 +139,9 @@ if (metrics.has("warm")) {
     });
   }
 }
+
+// After warm, so that cold wins below the threshold can be checked against their warm row.
+confirmColdWins(rows);
 
 if (metrics.has("memory") && gates.memory.report) {
   console.error("memory (lab measurement, not gated)");

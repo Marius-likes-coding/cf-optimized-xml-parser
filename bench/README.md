@@ -15,10 +15,10 @@ a **base** with a **candidate**:
 Two checks put base and candidate into **one bench Worker** and alternate between them, so
 machine drift and hardware differences hit both alike instead of being compared across runs.
 
-| check         | where                                                                                | metrics                                                                                                                                                  | gate        |
-| ------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `perf-local`  | local workerd, 5 runners in parallel, 2 fixtures each (`SHARD=i/5 npm run bench:pr`) | cold: total of the first 100 parses in 60 fresh isolates per variant; warm: time per parse after tier-up in 12 isolates, random order; 10 fixtures       | ≥ 5%        |
-| `perf-remote` | 4 real Cloudflare Workers (`npm run bench:pr:remote`)                                | warm: CPU per parse, from Cloudflare's own per-request CPU time; 5 fixtures. Pull requests: only with the `perf-remote` label; always on `main`, nightly | report only |
+| check         | where                                                                                | metrics                                                                                                                                                  | gate              |
+| ------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `perf-local`  | local workerd, 5 runners in parallel, 2 fixtures each (`SHARD=i/5 npm run bench:pr`) | cold: total of the first 100 parses in 60 fresh isolates per variant; warm: time per parse after tier-up in 12 isolates, random order; 10 fixtures       | ≥ 5% (🟢 from 3%) |
+| `perf-remote` | 4 real Cloudflare Workers (`npm run bench:pr:remote`)                                | warm: CPU per parse, from Cloudflare's own per-request CPU time; 5 fixtures. Pull requests: only with the `perf-remote` label; always on `main`, nightly | report only       |
 
 **What runs.** A first job (`scope`) compares the change with its base. If it touches nothing
 the benchmarks measure (`src/`, `scripts/`, `bench/gates.json`, `package.json`, the lockfile,
@@ -31,7 +31,11 @@ missing shard report fails it. Nightly and manual runs always measure.
 A row is a **regression** only when the change reaches the threshold **and** its 99% bootstrap
 confidence interval lies above 0, so noise alone can't fail the check. Other statuses: 🟡
 inconclusive (over the threshold, not significant), 🟡 slower (significant, at least half the
-threshold), 🟢 faster, ⚪ same. Thresholds, fixtures and sample sizes: `bench/gates.json`.
+threshold), 🟢 faster, ⚪ same. **Faster** has its own, lower threshold (`improvementPct`, 3%):
+the change reaches it and the interval lies below 0. A cold win smaller than the regression
+threshold also needs the same fixture's warm interval below 0; cold-only wins still need 5%
+(see "Gate calibration" below for why). Thresholds, fixtures and sample sizes:
+`bench/gates.json`.
 Retained memory is reported too, as information only (see the realism rules).
 
 **Reading the results.** Each pull request gets one comment with both tables, updated on every
@@ -158,6 +162,37 @@ The warm intervals are about as wide as before, but they now hold up in repeated
 cold rss rows narrowed from ±10% to about ±3%. perf-local took 2 min 36 s – 2 min 42 s per pull
 request (was about 4 min, and about 7 min until the comment appeared, which waited for
 perf-remote). The +14% sensitivity test (PR #29) hasn't been repeated with the new setup.
+
+**Gate calibration (2026-10-01).** The 7 A/A runs of the sharded setup on GitHub (140 gated
+rows, artifacts of the PR #31 and `main` runs) show how honest the 99% intervals are. Warm
+intervals are, if anything, too wide: the changes spread 0.83× as much as the intervals
+predict. Cold intervals are too narrow: each run adds about 1% of noise (fitted standard
+deviation 1.0%, at most 1.4%) that the bootstrap over isolates doesn't see. 4 of the 70 cold
+A/A rows had intervals that excluded 0 (0.7 expected), at −2.9%, −2.9%, +2.4% and −2.0%. Below
+about 3%, a cold interval below 0 therefore doesn't show that a change is real.
+
+The optimization loop (an untracked prompt kept outside this repository) accepts a change only
+if a `total-100` row is 🟢 in the local run and the same row is 🟢 again in CI. The chance of
+that, from a model fitted to these runs (one row like soap's; the local run assumed noisier
+than GitHub's):
+
+| faster from | change without effect accepted | real −4% accepted | real −5% accepted |
+| ----------: | -----------------------------: | ----------------: | ----------------: |
+|          5% |                         0.007% |                6% |               25% |
+|          4% |                          0.04% |               25% |               58% |
+|      **3%** |                       **0.3%** |           **58%** |           **85%** |
+|          2% |                           2.7% |               85% |               96% |
+
+At 5%, a real 5% win passed only about 1 time in 4, because both runs must land beyond −5%. At
+2.5%, the loop would accept a change without effect about once in 90 ideas, at 2% once in 40.
+The regression threshold stays at 5%: at 3%, about 14% of pull requests that don't change
+performance would fail on noise.
+
+Changes in code shape alone also move cold totals, and they repeat from run to run, so a second
+run doesn't remove them. A never-executed block in `parseString` moved sitemap cold +2.8% (warm
+±0.2%), and versions of the attribute-name fast path moved s3 cold +5…+8% in three runs, although
+s3 never reaches attribute parsing (`research/optimization-log.md`). So a cold win between 3%
+and 5% must show in warm too.
 
 **Remote.** On Cloudflare the divergence is far larger (the copy loaded second was 18–52%
 slower in 3 of 4 Workers of one A/A run), and it dominates: the +14% slowdown of test PR #29 did

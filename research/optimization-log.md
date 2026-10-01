@@ -33,6 +33,19 @@ Rejected in the M7 performance pass (2026-09-29, workerd 1.20260815.1, V8 15.1);
   there's nothing to normalize: −3% to +7%, within noise. Rejected.
 - **A general intern table for names** costs 10–30% CPU (S2, `research/spikes/s2-tree-building.md`).
 
+## Gate change (2026-10-01)
+
+Entries up to #39 were judged with 🟢 at −5%. Since then 🟢 starts at −3% (`improvementPct` in
+`bench/gates.json`; the regression gate stays at 5%). A cold win between −3% and −5% also needs
+the same fixture's warm interval below 0. Why: `bench/README.md`, "Gate calibration".
+
+Re-scored with the new rule, two earlier full runs pass: cheaper entity decoding r2 (entities
+cold −3.8%, warm CI below 0) and the clean end-tag slice run (soap cold −4.8%, warm −3.0%).
+#39 already ships both. The RAW `normalize()` skip, measured together with r2, isn't in #39. It
+had no signal on its own (r1), so it doesn't pass. Every other entry still fails: a 🔴 or 🟡
+slower row, or no cold row at −3% with its interval below 0. The M7 `indexOf` memos predate the
+paired bench (no intervals) and can't be re-scored.
+
 ## Entries
 
 ### 2026-09-30: ASCII fast path for attribute names only (failed)
