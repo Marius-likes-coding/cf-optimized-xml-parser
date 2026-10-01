@@ -684,3 +684,201 @@ paired bench (no intervals) and can't be re-scored.
   with many attribute-bearing lines (svg-like) is added to the gate. A variant without the tab
   memo's full scan (for example, tabs checked per value only when the value is long) was not
   tried.
+
+### 2026-10-01: Fewer charCodeAt sites to cut Turbofan's loop unrolling (failed — diagnostic)
+
+- **Hypothesis:** Turbofan's compile of `parseString` (15–25 ms per isolate) is now the largest
+  single item in `total-100`. Node's `--turbo-stats` (V8 13.6; same pipeline, svg 23 ms like
+  workerd's 24) puts register allocation at 28% and Turboshaft's optimization at 32%, with
+  `TurboshaftLoopUnrolling` 1.4 ms and 14% of the compile's memory. With
+  `--no-turboshaft-loop-unrolling` (diagnosis only; a flag can't ship), workerd compiles
+  `parseString` 3–6 ms faster (s3 15.1 → 12.0, rss 19.6 → 15.1, svg ~24.5 → 18.3). A synthetic
+  function with 40 `charCodeAt` sites and no JS loop compiles in 12.3 ms in workerd, 5.5 ms
+  without unrolling: each `charCodeAt` lowers to a small loop over string representations
+  (cons, sliced, thin), and Turboshaft partially unrolls each one ×4. `parseString` has 21 such
+  sites. Fewer sites should mean less compile.
+- **Change:** `src/parse-string.ts`, two equivalent variants, compile time measured only
+  (per-request trace, 3 fresh isolates each); reverted, only this log ships.
+  (v1) the text and end-tag whitespace loops as `do … while` with one `charCodeAt` site each
+  instead of two. (v2) the name-cache hash read through a one-site loop
+  (`for (k = lt + 2; k < lt + 5; k++) slot = (slot << 2) ^ xml.charCodeAt(k)`) instead of three
+  sites.
+- **Measured:** base `e0ca77a` → candidate +dirty; workerd 1.20260815.1. Turbofan compile of
+  `parseString`: base s3-ascii 15.1/15.3, rss-ascii 19.5/19.8 ms; v1 s3 16.2–16.5, rss
+  20.7–20.9 (+1.2 ms); v2 s3 15.2–15.8, rss 19.7–20.0 (no change). No bench:pr round (no compile
+  saving to measure).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** removing sites in source doesn't remove lowered loops one for one. Turbofan's own loop
+  peeling copies the first iteration of each innermost JS loop, and a `do … while` or a short
+  `for` adds loop structure of its own, so the graph stays the same size or grows.
+- **Retry if:** V8 stops unrolling the `charCodeAt` lowering loop (re-measure the synthetic: if
+  12.3 vs 5.5 ms closes, this entry is obsolete), or someone finds a construct that reads a
+  character without that loop. Notes for future loops: (1) Node's `--turbo-stats` works for
+  Turbofan phase timings (workerd's are lost when it's killed); `spikes`-style scripts lived in
+  the scratchpad. (2) Compile time doesn't follow bytecode size alone: measure each variant.
+
+### 2026-10-01: Named entities without the ";" search (failed)
+
+- **Hypothesis:** `decodeEntities` searches for ";" with `indexOf` before it looks at the name.
+  The five named references pin the position of ";" (no name character is ";"), so checking
+  the characters and the ";" directly saves one `indexOf` per named reference (~4,500 per parse
+  on entities). Expected: entities warm −6…−8%, sitemap/s3 −2…−4%, entities cold ≈ −3%.
+- **Change:** `src/entities.ts` only, one round: the named references (`amp` first, then `quot`,
+  `lt`/`gt`, `apos`) matched by integer compares including the ";". Only the remaining cases
+  (numeric references, unknown names, a missing ";") take the search and the old checks, in
+  the old order, so the errors are the same. A match never crosses `end`, which is a "<", a quote
+  or the end of the input. Reverted; only this log ships.
+- **Measured:** base `c8a4f82` (src as on main `e0ca77a`) → candidate +dirty; workerd
+  1.20260815.1. Equivalence: `SAME` on 5,427 and 64,908 inputs, and on 200,000 random
+  entity-fragment documents (text, attributes, CDATA; full error messages).
+  `decodeEntities`' Turbofan compile on entities 5.9–6.4 → 6.6 ms; no new deopt.
+  Quick (`entities,sitemap,s3-ascii,rss-ascii,soap`; 10 cold / 4 warm): warm entities −7.2% 🟢,
+  sitemap −4.7% 🟢, s3-ascii −3.7% 🟢, rss-ascii −2.0%, soap −1.2%; cold all ⚪ (entities −1.5%).
+  Full (60 cold / 12 warm): warm entities −6.9% 🟢 (−7.7…−5.4), sitemap −3.0% (−3.6…−2.3),
+  s3-ascii −1.9%, all else within ±1% ⚪; cold entities −0.6% (−3.0…+1.7), sitemap −1.9%
+  (−4.2…+0.2), s3-ascii −1.4%, rss-poison −4.2% (±9), all ⚪, no 🟡/🔴. Memory unchanged.
+  No encoding/bytes checks (failed).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the warm saving is real (one builtin call per entity), but `total-100` sees little of
+  it. On entities, `parseString` reaches Turbofan only at parse ~19 and `decodeEntities` at ~5,
+  so the warm-tier share is smaller than on other fixtures. In Ignition and Sparkplug the four
+  or five `charCodeAt` calls cost about as much as the `indexOf` they replace, and the larger
+  function compiles ~0.5 ms slower.
+- **Retry if:** combined with another `decodeEntities` saving that pays in the first parses. The
+  open item from the 2026-10-01 deopt entry is a candidate: the Maglev deopt at `source.length`
+  in parse 1 (≈0.5–0.7 ms on s3, sitemap and entities). Or if the gate adds an entity-heavy
+  fixture that tiers up early.
+
+### 2026-10-01: Name checks without slices (failed)
+
+- **Hypothesis:** A per-request `--trace-gc` shows scavenges taking 7–11% of `total-100` (100
+  cold parses: s3-ascii 19 scavenges, 6.8 ms; soap 20, 7.9 ms; svg 22, 7.7 ms; rss-ascii 13,
+  4.0 ms). Part of the allocation is garbage: every name check slices a temporary string only to
+  compare it (end tags, name-cache hits, predicted attribute names). An ablation without those
+  three checks (not equivalent, one isolate each) cut `total-100` ~15% (s3 66 → 56 ms, svg
+  106 → 90) and scavenges by a quarter (s3 19 → 14, svg 21 → 16), so most of the cost is the
+  checks' own work (two builtin calls each), not GC. Checks without a slice should recover part
+  of it.
+- **Change:** `src/parse-string.ts`, two variants, reverted; only this log ships.
+  (v1) end tag compared in place: a `charCodeAt` loop over the open element's name instead of
+  slice + `===`. (v2) the name cache stores the four characters after "<" of each cached start
+  tag in two `Int32Array`s (two UTF-16 code units per int, zeroed with the slot). A start tag
+  with an equal window and a name of up to four characters is then checked without a slice
+  (window plus the delimiter after the name); longer names still slice. Both `SAME` on 64,908
+  inputs.
+- **Measured:** base `e0ca77a`; workerd 1.20260815.1.
+  v1 `bench:ab` (1 ms clock, ±3%): Sparkplug s3 +35%, sitemap +33%, rss +25%; Maglev s3 +25%,
+  sitemap +6%; Turbofan ±0 except sitemap −11%; Turbofan compile s3 15.1 → 16.2 ms. Stopped
+  there.
+  v2 `bench:ab`: Ignition +2…+5%, Sparkplug 0…+6%, Maglev −13…+1%, Turbofan −6…+8%; compile s3
+  15.1 → 15.8 ms. v2 quick (`s3-ascii,sitemap,rss-ascii,ooxml-ascii,svg`; 10 cold / 4 warm):
+  warm rss-ascii −3.5% 🟢, ooxml-ascii −3.7% 🟢, svg −1.8%, s3-ascii −1.1%, sitemap −0.1%; cold
+  all ⚪ (s3 −7.2% ±10, sitemap −2.5%, ooxml −0.9%, svg +0.3%). No full run.
+  Also measured: a synthetic with 40 `codePointAt` sites compiles in 24.2 ms (40 `charCodeAt`:
+  11.7 ms), so swapping the read primitive makes compile worse.
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** in Ignition and Sparkplug a `charCodeAt` is a builtin call, so a per-character loop
+  costs far more than the two builtin calls of slice + `===`. Maglev is in between, and
+  Turbofan gains nothing. The window check avoids the calls only for names of up to four
+  characters, and it adds packing, two typed-array loads and stores to every start tag, so
+  the early tiers lose what the warm tier gains.
+- **Retry if:** V8 makes positional `startsWith` (or another non-allocating substring compare)
+  as cheap as slice + `===` in all tiers. Then the checks would stop allocating at no cost.
+  Note for future loops: GC is 7–11% of `total-100` (scavenges every ~5 parses in a fresh
+  isolate). Reducing allocation per parse helps, but the retained tree is fixed by the output
+  shape, and the remaining garbage is mostly these check slices.
+
+### 2026-10-01: Attribute loop outside parseString (failed)
+
+- **Hypothesis:** The attribute loop is ~1,000 of `parseString`'s 3,698 bytecode bytes. Documents
+  whose only attribute sits on the root (s3, sitemap, entities) run it once per parse, so its
+  feedback is complete and Turbofan compiles it in full. In its own function, larger than the
+  460-byte inlining limit, those documents would run it in Ignition/Sparkplug, and
+  `parseString` would compile ~30% faster. Attribute-heavy documents would compile it
+  separately at a similar total cost, plus one call per element with attributes.
+  Two other ideas were measured for compile time while choosing this one, both without effect.
+  (1) Rarely used values (`maxDepth`, `maxAttributes`, `maxNameLength`, `bom`, `seenDoctype`)
+  moved from locals to module scope, against register-allocation time. Node `--turbo-stats`:
+  s3 18.0–18.1 → 18.2–18.5 ms, svg 22.8–22.9 → 23.5–23.7 ms.
+  (2) The `charCodeAt`-site work in the 2026-10-01 diagnostic entry above.
+- **Change:** `src/parse-string.ts` only, one round: `attributes(xml, p, ch, predicted, lt,
+  maxAttributes, maxNameLength, amp)` (1,005 bytecode bytes) holds the loop verbatim. It is
+  called when the character after the name isn't ">" or "/", and reports the end position, the
+  next character, the "&" memo and an attribute-miss flag in module-level variables;
+  `tabOrBreak` moved to module scope, reset per parse. `parseString` 3,698 → 2,520 bytes. `SAME` on
+  5,427 and 64,908 inputs. Reverted; only this log ships.
+- **Measured:** base `e0ca77a`; workerd 1.20260815.1.
+  Trace (one fresh isolate each): `parseString` Turbofan compile s3 15.1 → 11.1 ms, sitemap
+  15.0 → 10.8, soap 15.3 → 10.2, ooxml 16.9 → 11.7, rss 19.5 → 15.0, svg 24 → 18.6. Maglev
+  −0.8…−1.0 ms; rss-small Maglev 3.6 → 2.6. On svg `parseString` now tiers up much later (Maglev
+  #12, Turbofan #25). `attributes()` compiles in ~5.5 ms Turbofan where attributes are dense,
+  and on soap and ooxml it deoptimizes once in Maglev at parse 2 ("insufficient type
+  feedback"): its first compile, during parse 1, comes before the name cache's predictions run.
+  Quick (`s3-ascii,sitemap,svg,soap,rss-ascii,ooxml-ascii`; 10 cold / 4 warm): warm svg +6.0%
+  🔴 (+4.4…+8.5), soap +5.2% 🔴, ooxml-ascii +3.9% 🟡 slower, rss-ascii +1.8%, s3 +1.8%, sitemap
+  +0.5%; cold sitemap −9.0% (−15.3…+0.7), s3 −4.6%, ooxml −0.4%, soap +0.5%, svg +3.7%,
+  rss-ascii +12.6% (🟡 inconclusive, ±24). No full run.
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the compile saving is real, but each element with attributes pays a call with eight
+  arguments and four module-level results (~25–30 ns). On svg, soap and ooxml that's 4–6% of
+  warm time, and their cold totals don't gain because the compile only moves to the new
+  function.
+- **Retry if:** the call can be made nearly free. For example, a version that passes and returns
+  almost nothing: parse state in one reused object, end position as the return value. Or if
+  the gate weighs attribute-light documents more. The compile numbers above give the upside:
+  about −4 ms of Turbofan compile per isolate on s3 and sitemap.
+
+### 2026-10-01: Skip the duplicate and maxAttributes checks for predicted attribute names (accepted)
+
+- **Hypothesis:** The ablation appendix of the entity-decoding entry measured the duplicate-
+  attribute check at ~8% of svg warm time, with "no legal angle" then. The name cache (#44)
+  creates one: while a start tag's attribute names match the cached element's names in order,
+  they are a prefix of a list that passed the duplicate check and the maxAttributes check in this
+  parse, with the same limits. Neither check can fail, so both can be skipped. Attribute-heavy
+  documents with repeated elements (svg) should gain warm and cold; others are neutral.
+- **Change:** two rounds.
+  (r1, rejected) a lean inline loop for predicted names (no regex, no duplicate or
+  maxAttributes check), with everything else (no prediction, a different or an extra name)
+  continued in an out-of-line `attributes()` (958 bytecode bytes; `parseString` 3,698 → 3,380).
+  Attribute-light documents then never ran the inline loop, so Turbofan compiled `parseString`
+  ~4 ms faster on s3 and sitemap. Warm-up extended so the inline loop saw every value kind.
+  (r2, shipped) `src/parse-string.ts` only: in the existing loop, `onPrediction` stays true
+  while every name hit the prediction, and the two checks run only once it's false. The
+  duplicate check's Set (used beyond 16 names) is now built from all names so far the first
+  time it's needed (`seenReady`), since the check may start late. No new path for the
+  warm-up: block coverage unchanged. `test/unit/strict.test.ts`: three tests (duplicate after
+  predicted names, also beyond 16; maxAttributes after predicted names; predicted, extra and
+  reordered names with entities, quotes and tabs).
+- **Measured:** base `e0ca77a`; workerd 1.20260815.1. Equivalence `SAME` (both rounds) on 5,427
+  and 64,908 inputs, on 160,000 random attribute-list documents (duplicates, more than 16
+  names, mispredictions, `maxAttributes` 3 and 17, `maxNameLength` 1) and on 200,000 entity
+  documents, full error messages.
+  r1 full (60 cold / 12 warm): cold svg −7.2% 🟢, s3-ascii −7.7% 🟢, sitemap −7.3% 🟢; warm svg
+  −9.1% 🟢; rss-small cold +8.0% 🟡 inconclusive. Pooled `bench:cold` (300 isolates per
+  variant): rss-small +17% (6.46 → 7.58 ms, +1.06 ms in parses 11–100), s3-small −6%. In small
+  documents, elements whose attributes don't repeat within the document (root, the first
+  `<guid>`) run `attributes()`, which stays in Ignition/Sparkplug until ~parse 55. Before,
+  that code ran in Maglev-compiled `parseString` from parse 9. Rejected for that.
+  r2 quick (`svg,soap,ooxml-ascii,rss-ascii,rss-small`; 10/4): cold svg −7.1% 🟢; warm svg
+  −9.1% 🟢; rest ⚪. Pooled rss-small (300 isolates): 6.78 → 6.85 ms (+0.9% mean, −0.3% trimmed).
+  r2 full (60 cold / 12 warm): cold svg −5.1% 🟢 (−6.9…−3.5), soap −1.9%, others within
+  ±1% except rss-poison +3.2% (±8) ⚪ and rss-small +8.6% 🟡 inconclusive (−5.2…+23.7; the
+  pooled measurement above is neutral); warm svg −9.5% 🟢 (−10.1…−8.9, all 12 isolates), soap
+  −1.0%, ooxml −0.8%, rss-poison −1.1%, rest ±0.4% ⚪; memory unchanged.
+  Encodings (`rss-latin1,rss-cjk,ooxml-cjk,s3-cjk`): cold −1.4/−1.6/−0.5/−0.5%, warm
+  +0.4/−1.8/−0.8/−0.1%, all ⚪. `src/decode.ts` untouched, so no bytes check.
+  Lint, typecheck, 163 unit tests, fuzz (20,000 inputs), size (8.71 kB brotlied), conformance
+  1263/1736 = main.
+- **CI:** perf-local watched before merge (required: no 🔴 row and svg total-100 🟢 again);
+  `perf-remote` label not added (report-only).
+- **Why:** svg repeats elements with many attributes (5–7 per `<rect>`/`<path>`), so the linear
+  duplicate scan (up to 15 compares per name) was a large share of its attribute work. Other
+  fixtures have one or two attributes per element, where the scan was short anyway. r1 showed
+  that the compile saving of moving the general path out is real (~4 ms on s3 and sitemap). But
+  a function called only a few times per parse stays in the slow tiers, and small documents
+  pay for that.
+- **Retry if:** accepted. r1's outlining is worth another try only if small documents can avoid
+  it, for example if the general path is moved out only for elements past the root, or if V8
+  tiers up rarely called functions sooner. Note for future loops: a gated-row 🟡 inconclusive
+  on rss-small has appeared in four full runs in a row (+2.5…+8.6%). Pooled `bench:cold`
+  (`SAMPLES=75`, four passes) settles it.

@@ -6,6 +6,8 @@ const attributes = (count: number): string =>
   `<a ${Array.from({ length: count }, (_, index) => `a${String(index)}="1"`).join(" ")}/>`;
 const name = (length: number): string => "n".repeat(length);
 const doctype = (size: number): string => `<!DOCTYPE a [${" ".repeat(size)}]><a/>`;
+const many = (count: number): string =>
+  Array.from({ length: count }, (_, index) => `a${String(index)}="1"`).join(" ");
 
 describe("normalization", () => {
   it(String.raw`turns \r\n and \r into \n in text, CDATA, comments and PI data`, () => {
@@ -155,5 +157,48 @@ describe("repeated names", () => {
     expect(() => parse("<r><abcdef/></r>", { maxNameLength: 5 })).toThrow(/maxNameLength/);
     expect(() => parse('<r><abcdef x="1"/><x')).toThrow(XmlError);
     expect(() => parse('<abcdef x="1"/>', { maxNameLength: 5 })).toThrow(/maxNameLength/);
+  });
+});
+
+// Attribute names that repeat a cached element's are matched without the duplicate and
+// maxAttributes checks (they can't fail there); every other case must still run them.
+describe("predicted attributes", () => {
+  it("rejects a duplicate after predicted names", () => {
+    expect(() => parse('<r><e x="1" y="2"/><e x="1" y="2" x="3"/></r>')).toThrow(
+      /duplicate attribute/,
+    );
+    expect(() => parse(`<r><e ${many(20)}/><e ${many(20)} a5="2"/></r>`)).toThrow(
+      /duplicate attribute/,
+    );
+  });
+
+  it("keeps maxAttributes after predicted names", () => {
+    expect(() => parse('<r><e x="1"/><e x="1" y="2"/></r>', { maxAttributes: 1 })).toThrow(
+      /maxAttributes/,
+    );
+    expect(() => parse('<r><e x="1"/><e x="1"/></r>', { maxAttributes: 1 })).not.toThrow();
+  });
+
+  it("parses predicted, extra and reordered names with every kind of value", () => {
+    const doc = parse(
+      "<r><e s='x &amp; y' t=\"a\tb\"/><e s='x &amp; y' t=\"a\tb\"/><e s='1' t='2' u='3'/>" +
+        `<e t="2" s="1"/><e ${many(18)}/><e ${many(18)} b="2"/></r>`,
+    );
+    expect(doc.root.children).toEqual([
+      { name: "e", attrs: ["s", "x & y", "t", "a b"], children: null },
+      { name: "e", attrs: ["s", "x & y", "t", "a b"], children: null },
+      { name: "e", attrs: ["s", "1", "t", "2", "u", "3"], children: null },
+      { name: "e", attrs: ["t", "2", "s", "1"], children: null },
+      {
+        name: "e",
+        attrs: Array.from({ length: 18 }, (_, i) => [`a${String(i)}`, "1"]).flat(),
+        children: null,
+      },
+      {
+        name: "e",
+        attrs: [...Array.from({ length: 18 }, (_, i) => [`a${String(i)}`, "1"]).flat(), "b", "2"],
+        children: null,
+      },
+    ]);
   });
 });
