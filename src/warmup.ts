@@ -17,6 +17,11 @@ import { parseString, resetParser } from "./parse-string.js";
  * value search for the next "&"; `p = "q"` and `<?p\r\n` run the whitespace loops and
  * comparisons that single spaces skip. Block coverage of parsing both documents should leave
  * only error paths and plain assignments unrun.
+ *
+ * The name cache in parseString needs hits and every kind of miss: repeated start tags with and
+ * without attributes (`<v>`, `<c>`, `<abcd>`), an attribute name that differs from the predicted
+ * one, extends it or goes past the predicted list, and element names that extend the cached name
+ * or differ from it after the four hashed characters (`<abcde>`, `<abcdf>`).
  */
 const COMMON =
   '<!DOCTYPE k:root [\n  <!ENTITY e "x>y">\n  <!-- ] in a comment -->\n  <?pi ] in the subset?>\n]>\n' +
@@ -27,9 +32,11 @@ const COMMON =
   '  <e x="1" y="2" z="3">t &lt; &gt; &quot; &apos; TEXT</e>\n' +
   "  <f>line\r\nbreak &amp; more<![CDATA[c <d> &]]>after &#xE9;&#xe9;&#x1F600;</f>\n" +
   "  <h><![CDATA[first]]></h>\n" +
-  '  <!-- & -->\n  <v p = "q"/>\n' +
+  '  <!-- & -->\n  <v p = "q"/><v p = "q"/>\n' +
   "  <!-- in -->\n  <?p\r\nin\r\ndata?>\n" +
   "  <n><m>deep</m><m/></n >\n" +
+  '  <c x="1" y="2"/><c x="1" y="2"/><c x="1" q="2" z="3"/><c x="1" yy="2"/>\n' +
+  '  <abcd/><abcd/><abcd x="1"/><abcde/><abcdf/>\n' +
   "  mixed <b>bold</b> text\n" +
   "</k:root>\n<!-- end -->\n";
 

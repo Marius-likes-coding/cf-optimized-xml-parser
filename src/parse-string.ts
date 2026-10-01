@@ -4,9 +4,9 @@
  * building, S4 correctness costs, S5 JIT behavior) and docs/implementation-plan.md.
  *
  * - Scanning is builtin-driven: indexOf finds text runs, markup ends and attribute-value ends;
- *   names are matched with a sticky regex's test(). Checks that need a search share memoized
- *   positions (next "&", "\r", "]]>", tab/newline/CR), so a document without them pays one
- *   failed search each.
+ *   names are matched with a sticky regex's test(), unless they repeat a recent name (see
+ *   `recent`). Checks that need a search share memoized positions (next "&", "\r", "]]>",
+ *   tab/newline/CR), so a document without them pays one failed search each.
  * - Nodes are one object-literal shape. Children are collected on a module-level scratch stack
  *   and copied out with slice() at the end tag; a lone text child is stored as the string.
  * - Module-level arrays keep one elements kind for the life of the isolate, so optimized code
@@ -40,6 +40,18 @@ const openStack: XmlElement[] = [{ name: "", attrs: null, children: null }];
 const frameStack: number[] = [0];
 /** Attribute names of the current element once it has more than 16 (see the duplicate check). */
 const seenNames = new Set<string>();
+/** Fills empty slots of `recent`. "/" never matches a start tag's name: "</" starts an end tag. */
+const NO_ELEMENT: XmlElement = { name: "/", attrs: null, children: null };
+/**
+ * Name cache: the last element whose start tag hashed to each slot (hash of the four characters
+ * after "<"). A start tag that repeats the cached name, followed by a character that ends a name,
+ * takes the cached string instead of a NAME_RE test and a slice, and the cached element's
+ * attribute names predict its own. Names in the cache were checked by NAME_RE in this parse, so
+ * accept/reject stays the same; the cache is emptied at the end of every parse.
+ */
+const recent: XmlElement[] = Array.from({ length: 256 }, () => NO_ELEMENT);
+/** Slots of `recent` that hold an element, so the end of a parse resets only those. */
+const usedSlots: number[] = [0];
 
 /**
  * Drops every reference the module-level stacks hold, after a thrown error or the warm-up. A
@@ -51,6 +63,8 @@ export function resetParser(): void {
   openStack.length = 0;
   frameStack.length = 0;
   seenNames.clear();
+  recent.fill(NO_ELEMENT);
+  usedSlots.length = 0;
 }
 
 function skipDoctype(xml: string, start: number): number {
@@ -103,6 +117,80 @@ function skipDoctype(xml: string, start: number): number {
     xml,
     start,
   );
+}
+
+/** Set by markup(): the position after the comment or PI, and the updated "\r" memo. */
+let markupEnd = 0;
+let markupCr = 0;
+
+/**
+ * A comment or PI at `lt` ("<!--" or "<?"): the node, or null for the XML declaration. Outside
+ * parseString on purpose: these run a few times per document, but parseString's Maglev and
+ * Turbofan compiles cost per bytecode byte that ever ran (research/optimization-log.md). This
+ * function is larger than Turbofan's inlining limit, so it stays a call.
+ */
+function markup(
+  xml: string,
+  lt: number,
+  cr: number,
+  maxNameLength: number,
+  bom: number,
+): XmlNode | null {
+  const length = xml.length;
+  if (xml.charCodeAt(lt + 1) === 33) {
+    const end = xml.indexOf("-->", lt + 4);
+    if (end === -1) fail("unterminated comment", xml, lt);
+    if (xml.indexOf("--", lt + 4) < end || (end > lt + 4 && xml.charCodeAt(end - 1) === 45))
+      fail('"--" inside a comment', xml, lt);
+    if (cr < lt) {
+      cr = xml.indexOf("\r", lt);
+      if (cr === -1) cr = length;
+    }
+    markupCr = cr;
+    markupEnd = end + 3;
+    return {
+      name: "#comment",
+      attrs: null,
+      children: normalize(xml.slice(lt + 4, end), cr < end ? LINE_ENDS : RAW),
+    };
+  }
+  const end = xml.indexOf("?>", lt + 2);
+  if (end === -1) fail("unterminated processing instruction", xml, lt);
+  NAME_RE.lastIndex = lt + 2;
+  if (!NAME_RE.test(xml)) fail("invalid processing instruction target", xml, lt);
+  let p = NAME_RE.lastIndex;
+  let ch = xml.charCodeAt(p);
+  if (p !== end && ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13)
+    fail("invalid processing instruction target", xml, lt);
+  if (p - lt - 2 > maxNameLength) fail("name longer than maxNameLength", xml, lt);
+  const target = xml.slice(lt + 2, p);
+  while (p < end && (ch === 32 || ch === 10 || ch === 9 || ch === 13)) ch = xml.charCodeAt(++p);
+  markupEnd = end + 2;
+  if (
+    target.length === 3 &&
+    (target.charCodeAt(0) | 32) === 120 &&
+    (target.charCodeAt(1) | 32) === 109 &&
+    (target.charCodeAt(2) | 32) === 108
+  ) {
+    if (target !== "xml") fail('processing instruction target "xml" is reserved', xml, lt);
+    if (lt !== bom) fail("XML declaration not at the start of the document", xml, lt);
+    const declaration = DECLARATION_RE.exec(xml.slice(p, end));
+    if (declaration === null) fail("malformed XML declaration", xml, p);
+    // A 1.0 processor treats any 1.x as 1.0 (§2.8); XML 1.1 has different rules and is refused.
+    if (declaration[2] === "1.1") fail("XML 1.1 is not supported", xml, p);
+    markupCr = cr;
+    return null;
+  }
+  if (cr < lt) {
+    cr = xml.indexOf("\r", lt);
+    if (cr === -1) cr = length;
+  }
+  markupCr = cr;
+  return {
+    name: `?${target}`,
+    attrs: null,
+    children: normalize(xml.slice(p, end), cr < end ? LINE_ENDS : RAW),
+  };
 }
 
 export function parseString(
@@ -200,24 +288,20 @@ export function parseString(
       lt = xml.indexOf("<", textStart);
       continue;
     }
-    if (c === 33) {
-      if (xml.charCodeAt(lt + 2) === 45 && xml.charCodeAt(lt + 3) === 45) {
-        const end = xml.indexOf("-->", lt + 4);
-        if (end === -1) fail("unterminated comment", xml, lt);
-        if (xml.indexOf("--", lt + 4) < end || (end > lt + 4 && xml.charCodeAt(end - 1) === 45))
-          fail('"--" inside a comment', xml, lt);
-        if (cr < lt) {
-          cr = xml.indexOf("\r", lt);
-          if (cr === -1) cr = length;
-        }
-        scratch[top++] = {
-          name: "#comment",
-          attrs: null,
-          children: normalize(xml.slice(lt + 4, end), cr < end ? LINE_ENDS : RAW),
-        };
+    if (c === 63 || (c === 33 && xml.charCodeAt(lt + 2) === 45 && xml.charCodeAt(lt + 3) === 45)) {
+      // Comment or PI: a few per document, so they are compiled in markup(), not here.
+      const node = markup(xml, lt, cr, maxNameLength, bom);
+      cr = markupCr;
+      textStart = markupEnd;
+      if (node !== null) {
+        scratch[top++] = node;
         lastText = false;
-        textStart = end + 3;
-      } else if (xml.startsWith("[CDATA[", lt + 2)) {
+      }
+      lt = xml.indexOf("<", textStart);
+      continue;
+    }
+    if (c === 33) {
+      if (xml.startsWith("[CDATA[", lt + 2)) {
         if (open.length === 0) fail("CDATA section outside the root element", xml, lt);
         const end = xml.indexOf("]]>", lt + 9);
         if (end === -1) fail("unterminated CDATA section", xml, lt);
@@ -242,68 +326,61 @@ export function parseString(
       lt = xml.indexOf("<", textStart);
       continue;
     }
-    if (c === 63) {
-      const end = xml.indexOf("?>", lt + 2);
-      if (end === -1) fail("unterminated processing instruction", xml, lt);
-      NAME_RE.lastIndex = lt + 2;
-      if (!NAME_RE.test(xml)) fail("invalid processing instruction target", xml, lt);
-      let p = NAME_RE.lastIndex;
-      let ch = xml.charCodeAt(p);
-      if (p !== end && ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13)
-        fail("invalid processing instruction target", xml, lt);
-      if (p - lt - 2 > maxNameLength) fail("name longer than maxNameLength", xml, lt);
-      const target = xml.slice(lt + 2, p);
-      while (p < end && (ch === 32 || ch === 10 || ch === 9 || ch === 13)) ch = xml.charCodeAt(++p);
-      if (
-        target.length === 3 &&
-        (target.charCodeAt(0) | 32) === 120 &&
-        (target.charCodeAt(1) | 32) === 109 &&
-        (target.charCodeAt(2) | 32) === 108
-      ) {
-        if (target !== "xml") fail('processing instruction target "xml" is reserved', xml, lt);
-        if (lt !== bom) fail("XML declaration not at the start of the document", xml, lt);
-        // The declaration's content. Checked here, not in a helper: see the end of the function.
-        const declaration = DECLARATION_RE.exec(xml.slice(p, end));
-        if (declaration === null) fail("malformed XML declaration", xml, p);
-        // A 1.0 processor treats any 1.x as 1.0 (§2.8); XML 1.1 has different rules and is refused.
-        if (declaration[2] === "1.1") fail("XML 1.1 is not supported", xml, p);
-      } else {
-        if (cr < lt) {
-          cr = xml.indexOf("\r", lt);
-          if (cr === -1) cr = length;
-        }
-        scratch[top++] = {
-          name: `?${target}`,
-          attrs: null,
-          children: normalize(xml.slice(p, end), cr < end ? LINE_ENDS : RAW),
-        };
-        lastText = false;
-      }
-      textStart = end + 2;
-      lt = xml.indexOf("<", textStart);
-      continue;
-    }
 
-    // Start tag.
-    NAME_RE.lastIndex = lt + 1;
-    if (!NAME_RE.test(xml)) fail("invalid or missing element name", xml, lt);
-    let p = NAME_RE.lastIndex;
-    if (p - lt - 1 > maxNameLength) fail("name longer than maxNameLength", xml, lt);
+    // Start tag. A cache hit needs the same characters and then one that ends a name: NAME_RE
+    // would match exactly the cached name there.
+    const slot =
+      ((c << 6) ^
+        (xml.charCodeAt(lt + 2) << 4) ^
+        (xml.charCodeAt(lt + 3) << 2) ^
+        xml.charCodeAt(lt + 4)) &
+      255;
+    const similar = recent[slot] as XmlElement;
+    let name = similar.name;
+    let p = lt + 1 + name.length;
     let ch = xml.charCodeAt(p);
-    if (ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13 && ch !== 62 && ch !== 47)
-      fail("invalid character in element name", xml, p);
-    const name = xml.slice(lt + 1, p);
+    let predicted: string[] | null = similar.attrs;
+    // Set on any miss: the cache then takes this element, so its attribute names predict next.
+    let missed = false;
+    if (
+      (ch !== 62 && ch !== 32 && ch !== 47 && ch !== 10 && ch !== 9 && ch !== 13) ||
+      xml.slice(lt + 1, p) !== name
+    ) {
+      NAME_RE.lastIndex = lt + 1;
+      if (!NAME_RE.test(xml)) fail("invalid or missing element name", xml, lt);
+      p = NAME_RE.lastIndex;
+      if (p - lt - 1 > maxNameLength) fail("name longer than maxNameLength", xml, lt);
+      ch = xml.charCodeAt(p);
+      if (ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13 && ch !== 62 && ch !== 47)
+        fail("invalid character in element name", xml, p);
+      name = xml.slice(lt + 1, p);
+      predicted = null;
+      missed = true;
+      if (similar === NO_ELEMENT) usedSlots.push(slot);
+    }
     let aTop = 0;
     for (;;) {
       while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = xml.charCodeAt(++p);
       if (ch === 62 || ch === 47) break;
       const nameStart = p;
-      NAME_RE.lastIndex = p;
-      if (!NAME_RE.test(xml)) fail("invalid or missing attribute name", xml, p);
-      p = NAME_RE.lastIndex;
-      if (p - nameStart > maxNameLength) fail("name longer than maxNameLength", xml, nameStart);
+      // The element in the cache predicts this attribute's name, checked like the element name.
+      // Without a prediction, "/" can't match: an attribute name never starts with "/".
+      let attributeName =
+        predicted !== null && aTop < predicted.length ? (predicted[aTop] as string) : "/";
+      p = nameStart + attributeName.length;
       ch = xml.charCodeAt(p);
-      const attributeName = xml.slice(nameStart, p);
+      if (
+        (ch !== 61 && ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13) ||
+        xml.slice(nameStart, p) !== attributeName
+      ) {
+        NAME_RE.lastIndex = nameStart;
+        if (!NAME_RE.test(xml)) fail("invalid or missing attribute name", xml, nameStart);
+        p = NAME_RE.lastIndex;
+        if (p - nameStart > maxNameLength) fail("name longer than maxNameLength", xml, nameStart);
+        ch = xml.charCodeAt(p);
+        attributeName = xml.slice(nameStart, p);
+        missed = true;
+      }
       // Duplicate check: a linear scan up to 16 attributes, a Set beyond, so raised limits
       // can't make it quadratic (20k attributes: 1.2 s linear).
       if (aTop < 32) {
@@ -362,6 +439,7 @@ export function parseString(
       if (root !== null) fail("more than one root element", xml, lt);
       root = node;
     }
+    if (missed) recent[slot] = node;
     scratch[top++] = node;
     lastText = false;
     if (!selfClosing) {
@@ -378,15 +456,16 @@ export function parseString(
   if (open.length > 0) fail("unclosed element at end of input", xml, length);
   if (root === null) return fail("no root element", xml, length);
   const children = scratch.slice(0, top);
-  // resetParser() inlined, like the declaration check above. Code that runs once per parse in a
-  // helper has no type feedback yet when the top tier compiles this function (around parse 10 of
-  // a dense 100 KB document): V8 inlines the helper anyway, the optimized code deoptimizes on
-  // its first run and the next parses pay a second top-tier compile (soap, s3: about 15 ms).
-  // In this function the same code has feedback from the first parse on.
+  // resetParser() inlined. Code that runs once per parse in a small helper has no type feedback
+  // yet when the top tier compiles this function (around parse 10 of a dense 100 KB document):
+  // V8 inlines the helper anyway, the optimized code deoptimizes on its first run and the next
+  // parses pay a second top-tier compile (soap, s3: about 15 ms). In this function the same code
+  // has feedback from the first parse on. markup() is too large to inline, so it stays a call.
   scratch.length = 0;
   attributeScratch.length = 0;
   open.length = 0;
   frames.length = 0;
   seenNames.clear();
+  while (usedSlots.length > 0) recent[usedSlots.pop() as number] = NO_ELEMENT;
   return { root, children };
 }
