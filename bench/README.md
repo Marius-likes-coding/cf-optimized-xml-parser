@@ -15,18 +15,19 @@ a **base** with a **candidate**:
 Two checks put base and candidate into **one bench Worker** and alternate between them, so
 machine drift and hardware differences hit both alike instead of being compared across runs.
 
-| check         | where                                                                                | metrics                                                                                                                                                  | gate              |
-| ------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `perf-local`  | local workerd, 5 runners in parallel, 2 fixtures each (`SHARD=i/5 npm run bench:pr`) | cold: total of the first 100 parses in 60 fresh isolates per variant; warm: time per parse after tier-up in 12 isolates, random order; 10 fixtures       | ≥ 5% (🟢 from 3%) |
-| `perf-remote` | 4 real Cloudflare Workers (`npm run bench:pr:remote`)                                | warm: CPU per parse, from Cloudflare's own per-request CPU time; 5 fixtures. Pull requests: only with the `perf-remote` label; always on `main`, nightly | report only       |
+| check         | where                                                                                                 | metrics                                                                                                                                                       | gate              |
+| ------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `perf-local`  | local workerd on 16 runners in parallel, each measuring every fixture (`SHARD=i/16 npm run bench:pr`) | cold: CPU of the first 100 parses in fresh isolates, 640 isolates per variant (rss-small 3,840); warm: time per parse after tier-up, 16 isolates; 10 fixtures | ≥ 5% (🟢 from 3%) |
+| `perf-remote` | 4 real Cloudflare Workers (`npm run bench:pr:remote`)                                                 | warm: CPU per parse, from Cloudflare's own per-request CPU time; 5 fixtures. Pull requests: only with the `perf-remote` label; always on `main`, nightly      | report only       |
 
 **What runs.** A first job (`scope`) compares the change with its base. If it touches nothing
 the benchmarks measure (`src/`, `scripts/`, `bench/gates.json`, `package.json`, the lockfile,
 `mise.toml`, `tsconfig.json`, the perf workflow and `.github/actions/`), both checks are skipped
 and `perf-local` passes in seconds: docs, research and test-only pull requests don't wait for a
-benchmark. Otherwise each shard runner measures its fixtures, paired as above, and the
-`perf-local` job merges the shards' reports (`scripts/bench-merge.mjs`) and applies the gate; a
-missing shard report fails it. Nightly and manual runs always measure.
+benchmark. Otherwise 16 shard runners each measure every fixture, paired as above, and the
+`perf-local` job merges the shards' reports (`scripts/bench-merge.mjs`), recomputes every row
+from all runners and applies the gate; a missing shard report fails it. A shard's own report is
+information only. Nightly and manual runs always measure. A pull request waits about 7 minutes.
 
 A row is a **regression** only when the change reaches the threshold **and** its 99% bootstrap
 confidence interval lies above 0, so noise alone can't fail the check. Other statuses: 🟡
@@ -40,9 +41,11 @@ Retained memory is reported too, as information only (see the realism rules).
 
 **Reading the results.** Each pull request gets one comment with both tables, updated on every
 run; each job's summary page has its own table. `bench/results/perf-local.json` (merged) and
-`perf-remote.json` are uploaded as artifacts, each shard's report as `shard-local-<n>`. Shards
-run on whatever hardware GitHub assigns, so absolute times can differ between fixtures by up to
-2×; the changes are paired within each runner and stay comparable.
+`perf-remote.json` are uploaded as artifacts, each shard's report as `shard-local-<n>`. GitHub
+assigns each shard a machine of its own choosing (six CPU models in 70 jobs, AMD EPYC and Intel
+Xeon), so absolute times are averages over different hardware; the changes are paired within
+each runner. The last column splits the change by CPU vendor, so an effect that depends on the
+hardware shows there instead of as a disagreement between runs.
 
 **Measuring on Cloudflare.** Add the label `perf-remote` to the pull request; the workflow
 reruns with the remote check (about 7 minutes).
@@ -75,9 +78,53 @@ Nothing gated depends on something a deployed Worker can't have:
 6. **Memory is lab-only.** Retained-tree size needs `--expose-gc` and the inspector, which a
    Worker doesn't have, so it doesn't gate. (Object layout is the same in every tier.)
 
-Known gaps, covered by the remote check: local workerd lags production's V8 version; the local
-clock (1 ms ticks inside the Worker) differs from Cloudflare's per-request CPU time; the
+7. **CPU time, read from outside.** The harness reads the CPU time of workerd's JavaScript
+   thread from `/proc` between requests (next section). The Worker, its flags and the requests
+   stay as they were; the reading just replaces the Worker's own 1 ms clock, and it is closer to
+   what Cloudflare bills (the request thread's CPU time).
+
+Known gaps, covered by the remote check: local workerd lags production's V8 version; the
 hardware differs.
+
+### How the local check measures (since 2026-10-01)
+
+**Timing.** All JavaScript of a local workerd process runs on its main thread, and with the
+production flags so does every JIT compile. `scripts/workerd-run.mjs` reads that thread's CPU
+time in nanoseconds (`/proc/<pid>/task/<pid>/schedstat`) before and after each request, while
+the thread waits, so the reading is exact. Requests go to each Worker's own socket, not through
+Miniflare's entry Worker, which cost ~0.4 ms of the same thread's CPU per request. A request
+without a parse costs ~0.15 ms; each cold batch subtracts its median from every parse request,
+so the totals are the parses' own CPU, compiles and GC on that thread included. V8's helper
+threads (parallel GC) add 1–3%, which Cloudflare doesn't bill to the request either. Off Linux
+the scripts fall back to the Worker's clock and say so in the report.
+
+The Worker's clock advanced in whole milliseconds, so a 0.25–0.65 ms parse read as 0 or 1 ms.
+That gave each isolate's cold total 7–10% noise on GitHub runners, and it read single parses with
+a bias: over 300 single svg parses on this repo's laptop, the clock averaged 750 µs per parse
+against 560 µs of thread CPU. The `precise_timers` compatibility flag doesn't help: it coarsens
+timers to 3 ms.
+
+**Cold.** A fixture runs in batches; each batch is a fresh workerd process with 20 isolates per
+variant (rss-small: 40), interleaved, and batches alternate the two module orders. Each batch
+gives the log ratio of the trimmed means of its candidate and base totals. The 99% interval is a
+t-interval over units: one unit per batch on one machine, one unit per runner (its batches'
+mean) in CI. Differences between workerd processes and between machines are therefore inside
+the interval; the old bootstrap over the isolates of one process missed about 1% of run-to-run
+noise. In CI each of the 16 runners runs 2 batches per fixture (rss-small 6). On one machine,
+`npm run bench:pr` adds batches until the half-width is 1% or the fixture's budget (120 s,
+`COLD_BUDGET_SEC`) is used up; it stops on precision, never on the result, so the interval stays
+valid.
+
+**Warm** times its bursts the same way (thread CPU minus the isolate's median request without a
+parse). Each runner contributes one isolate; locally 12 isolates run in one process.
+
+**On your machine.** Pin the run to cores whose hyperthread siblings stay idle, for example
+`taskset -c 4,5 npm run bench:pr` on an 8-core laptop where `cat
+/sys/devices/system/cpu/cpu4/topology/thread_siblings_list` prints `4,12`. CPU time already
+ignores time the thread waits, but a laptop also changes its clock speed with temperature: on
+this repo's i9 laptop whole isolates ran up to 2× slower, so local intervals stay about twice as
+wide as CI's and use up more of the budget. CI decides; local runs steer. The report records the
+CPU affinity it ran with.
 
 ### Remote details
 

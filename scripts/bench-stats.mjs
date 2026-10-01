@@ -281,7 +281,11 @@ export function warmRow({ fixture, perIsolate, gates, timing, detail }) {
   const groups = perIsolate.map((samples) =>
     samples.base.map((value, index) => [value, samples.cand[index]]),
   );
-  const { perIsolatePct, ...stats } = isolateChange(groups);
+  // Point estimate as before (geometric mean of the per-isolate ratios); the interval is a
+  // t-interval over isolates like cold's: the percentile bootstrap over 16 isolates came out too
+  // narrow in A/A runs (z-scores spread 1.35× as much as it predicted).
+  const { perIsolatePct } = isolateChange(groups);
+  const stats = unitsChange(perIsolatePct.map((pct) => [Math.log1p(pct / 100)]));
   return {
     ...row({
       metric: "warm",

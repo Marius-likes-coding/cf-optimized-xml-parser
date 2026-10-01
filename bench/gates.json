@@ -23,7 +23,7 @@
         "minBatches": 6,
         "maxBatches": 40,
         "targetHalfWidthPct": 1,
-        "budgetSec": 240
+        "budgetSec": 120
       },
       "perFixture": {
         "rss-small": {

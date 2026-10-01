@@ -219,8 +219,9 @@ export async function measureCold({
       const batchStart = Date.now();
       const order = batch % scripts.length;
       const names = Array.from({ length: isolates * keys.length }, (_, index) => `cold${index}`);
+      const spares = keys.map((_, index) => `spare${index}`);
       const workerd = await startBenchWorkerd({
-        workers: names.map((name) => ({ name, script: scripts[order] })),
+        workers: [...spares, ...names].map((name) => ({ name, script: scripts[order] })),
         flags: PROD_FLAGS,
       });
       const { cpuNs } = workerd;
@@ -228,10 +229,19 @@ export async function measureCold({
       const raw = [];
       const overhead = [];
       try {
+        // A fresh process's first isolate runs 2–5% slower (rss-small: ~30%), and it used to be a
+        // base isolate in every batch, which made A/A runs lean −0.1…−0.5%. One discarded
+        // isolate per variant warms the process up first.
+        for (const [index, key] of keys.entries()) {
+          await workerd.call(spares[index], { v: key, fixture, count: 0, input });
+          for (let run = 0; run < parses; run++) {
+            await workerd.call(spares[index], { v: key, fixture, count: 1, input });
+          }
+        }
         for (let sample = 0; sample < isolates; sample++) {
           for (let step = 0; step < keys.length; step++) {
-            // Rotate both the order and the worker slot, so no variant is tied to one of them.
-            const key = keys[(sample + step) % keys.length];
+            // Rotate the order, the worker slot and, between batches, the variant that starts.
+            const key = keys[(sample + step + batch) % keys.length];
             const name = names[sample * keys.length + step];
             await workerd.call(name, { v: key, fixture, count: 0, input });
             const cpu = [];
