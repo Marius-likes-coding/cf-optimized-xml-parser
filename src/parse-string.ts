@@ -41,7 +41,10 @@ const frameStack: number[] = [0];
 /** Attribute names of the current element once it has more than 16 (see the duplicate check). */
 const seenNames = new Set<string>();
 
-/** Drops every reference the module-level stacks hold (after a parse or a thrown error). */
+/**
+ * Drops every reference the module-level stacks hold, after a thrown error or the warm-up. A
+ * successful parse does the same inline at its end (see there).
+ */
 export function resetParser(): void {
   scratch.length = 0;
   attributeScratch.length = 0;
@@ -100,14 +103,6 @@ function skipDoctype(xml: string, start: number): number {
     xml,
     start,
   );
-}
-
-/** Checks the XML declaration's content (between "<?xml" and "?>"). */
-function checkDeclaration(xml: string, start: number, end: number): void {
-  const declaration = DECLARATION_RE.exec(xml.slice(start, end));
-  if (declaration === null) fail("malformed XML declaration", xml, start);
-  // A 1.0 processor treats any 1.x as 1.0 (§2.8); XML 1.1 has different rules and is refused.
-  if (declaration[2] === "1.1") fail("XML 1.1 is not supported", xml, start);
 }
 
 export function parseString(
@@ -267,7 +262,11 @@ export function parseString(
       ) {
         if (target !== "xml") fail('processing instruction target "xml" is reserved', xml, lt);
         if (lt !== bom) fail("XML declaration not at the start of the document", xml, lt);
-        checkDeclaration(xml, p, end);
+        // The declaration's content. Checked here, not in a helper: see the end of the function.
+        const declaration = DECLARATION_RE.exec(xml.slice(p, end));
+        if (declaration === null) fail("malformed XML declaration", xml, p);
+        // A 1.0 processor treats any 1.x as 1.0 (§2.8); XML 1.1 has different rules and is refused.
+        if (declaration[2] === "1.1") fail("XML 1.1 is not supported", xml, p);
       } else {
         if (cr < lt) {
           cr = xml.indexOf("\r", lt);
@@ -379,6 +378,15 @@ export function parseString(
   if (open.length > 0) fail("unclosed element at end of input", xml, length);
   if (root === null) return fail("no root element", xml, length);
   const children = scratch.slice(0, top);
-  resetParser();
+  // resetParser() inlined, like the declaration check above. Code that runs once per parse in a
+  // helper has no type feedback yet when the top tier compiles this function (around parse 10 of
+  // a dense 100 KB document): V8 inlines the helper anyway, the optimized code deoptimizes on
+  // its first run and the next parses pay a second top-tier compile (soap, s3: about 15 ms).
+  // In this function the same code has feedback from the first parse on.
+  scratch.length = 0;
+  attributeScratch.length = 0;
+  open.length = 0;
+  frames.length = 0;
+  seenNames.clear();
   return { root, children };
 }

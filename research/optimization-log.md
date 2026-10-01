@@ -391,3 +391,63 @@ paired bench (no intervals) and can't be re-scored.
 - **Retry if:** accepted — future loops build on this. Revisit only if V8 intrinsifies
   positional `startsWith` (then the end-tag half is obsolete) or speeds string equality
   past slicing (then reformulate).
+
+### 2026-10-01: No feedback-starved deopt after the first top-tier compile (accepted)
+
+- **Hypothesis:** Ablations and profiles only see steady-state time, but `total-100` also holds
+  every compile. A per-request trace of fresh isolates (`--trace-opt --trace-deopt`, one parse
+  per request, no warm-up, as the cold bench runs) showed where soap's and s3-ascii's extra
+  cold time goes: their top-tier (Turbofan) compile of `parseString` lands early (parse ~9–10),
+  deoptimizes on its first run ("Insufficient type feedback for generic named access"), and
+  the following parses pay a Maglev recompile (~2.3 ms), a few Maglev-speed parses and a
+  **second** Turbofan compile (14–18 ms). The deopt sites (`--trace-deopt-verbose`) were inlined
+  helpers that run once per parse: first `checkDeclaration()` (`DECLARATION_RE.exec`), and once
+  that was moved, `resetParser()` (`scratch.length = 0`). A helper called once per parse gets
+  its feedback vector only after ~8 calls (lazy feedback allocation: a budget of bytecode
+  length × 8; `checkDeclaration`'s skipped `fail()` branches hand budget back, so it took even
+  longer), so when the parser tiers up around parse 10 the helper has no feedback, yet Turbofan
+  inlines it and plants a soft deopt. Code inside `parseString` has feedback from parse 2 on
+  (its loop allocates the vector during parse 1). Moving both bodies into `parseString` should
+  remove the deopt and the second compile: soap and s3-ascii −15…−20% total-100, every other
+  fixture neutral (they tier up later, after the helpers have feedback, and showed no deopt).
+- **Change:** `src/parse-string.ts` only: `checkDeclaration()`'s three lines inlined into the PI
+  branch (same regex, same errors at the same offsets) and the function deleted; at the end of
+  a successful parse, the five reset statements inline instead of the `resetParser()` call.
+  `resetParser()` stays exported for `parse()`'s catch and `warmup()`. No new path, so no
+  warm-up change (both warm-up documents run the declaration and the end of a parse).
+- **Measured:** base `44c7b71` → candidate `44c7b71`+dirty; workerd 1.20260815.1.
+  Trace, one isolate each (TOTAL of 100 per-request parses, ms): s3-ascii 95/86 → 67/80, soap
+  98/96 → 75/71, svg 123 → 119/143 (noise); after the change both show exactly one Maglev and
+  one Turbofan compile of `parseString` and no deopt.
+  Quick (`s3-ascii,soap,svg`; 10 cold / 4 warm): cold s3-ascii −25.6% 🟢 (−29.2…−17.9), soap
+  −23.2% 🟢 (−28.4…−19.4), svg +0.0% ⚪; warm all ⚪ (+0.4…+1.2%).
+  Full (60 cold / 12 warm): cold soap −21.3% 🟢 (−23.1…−19.7), s3-ascii −22.4% 🟢 (−25.1…−19.6),
+  all other rows ⚪ same (rss-ascii −0.6%, rss-poison +0.8%, rss-small −6.6% with its usual
+  ±11 CI, rss-crlf +0.9%, svg +1.2%, ooxml-ascii −0.7%, sitemap +0.6%, entities −0.2%); warm all
+  ⚪ within −0.2…+0.7% (12/12 isolates within ±3.3%); memory unchanged (rss-ascii −2.2%
+  baseline offset).
+  Encodings (`rss-latin1,rss-cjk,ooxml-cjk,s3-cjk`): cold s3-cjk −18.4% 🟢 (−21.0…−16.0), the
+  others ⚪ (rss-latin1 +0.6%, rss-cjk −0.8%, ooxml-cjk +0.1%); warm all ⚪ (−0.7…−0.1%).
+  Equiv `SAME` on 5,427 inputs; lint, typecheck, 157 unit tests, fuzz (20,000 inputs), size
+  (7.74 kB) pass; conformance 1263/1736 = main.
+  `src/decode.ts` untouched, so no bytes-input check needed.
+- **CI:** perf-local watched before merge (required: no 🔴 row and soap or s3-ascii total-100
+  🟢 again); `perf-remote` label not added (report-only).
+- **Why:** the cost was never execution but a compile thrown away: a one-time deopt in the
+  first ~10 parses costs a whole second top-tier compile (14–18 ms on a ~90 ms total). It hit
+  soap and s3-ascii because those reach Turbofan earliest (parse 9–10, minified and dense);
+  rss reaches it at ~16, after the helpers have feedback. svg reaches it at ~9 too but showed
+  no deopt (not investigated; most likely its compile didn't inline the helpers). Every document
+  that tiers up early benefits (the reset runs at the end of every parse, the declaration check
+  on every document with a declaration); after `warmup()` the helpers usually have feedback
+  already.
+- **Retry if:** accepted. Lessons for future loops: (1) trace the cold timeline per request
+  (`--trace-opt --trace-deopt`, one parse per request in a fresh isolate: `spikes/s5/trace.mjs`
+  with the parse loop replaced by one parse per request and a parse-number marker) before
+  profiling —
+  compiles and deopts are a large share of `total-100` (svg: ~24 ms Turbofan + ~4 ms Maglev of
+  ~120 ms) and invisible to warm profiles and ablations; (2) don't put once-per-parse work in a
+  small helper that `parseString` calls: V8 inlines it without feedback. Still open from the
+  same traces: `decodeEntities` deopts once in Maglev during parse 1 at `source.length` (the
+  "no further `&`" branch, reached only at the document's last entity; s3, sitemap, entities;
+  ~0.5 ms, under the gate on its own).
