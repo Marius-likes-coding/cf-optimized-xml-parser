@@ -653,3 +653,34 @@ paired bench (no intervals) and can't be re-scored.
   (`spikes/s5/bytecode.mjs` with `FILTER=parseString`) and the per-request compile times. (2)
   The cache's key is the four characters after "<", so prefixed names (`w:p`, `m:Order`) still
   separate; with two characters, ooxml and soap hit almost never (simulated).
+
+### 2026-10-01: indexOf memos instead of the attribute-value whitespace regex (failed)
+
+- **Hypothesis:** After the name cache, a warm `--prof` profile shows the attribute-value memo
+  `WS_RE` (`/[\t\n\r]/g`, next tab/newline/CR) at 6.4% of svg warm time (3.0%
+  `RegExpPrototypeTestFast` + 3.4% regex code), 4.2% of entities and 2% of s3. In svg it refreshes
+  once per element line, and in minified documents it scans to the end once per parse. Three
+  `indexOf` memos (`\n`, `\t`, and the existing `\r`), with `tabOrBreak` kept as their minimum
+  and only the memos that fell behind refreshed, should cost an `indexOf` (~6 ns) instead of a
+  regex call (~30–40 ns): svg warm about −4…−6%, the others −1…−3%. M7 rejected "indexOf memos
+  for newline/tab" at −3…+7% (noise), but that predates the paired bench and the name cache,
+  which roughly doubled this cost's share.
+- **Change:** `src/parse-string.ts` only, one round, stacked on the name-cache commit (`c8a4f82`,
+  PR #44): `WS_RE` removed; locals `tab` and `lineFeed`; the refresh updates whichever of
+  `lineFeed`, `tab` and `cr` is behind `valueStart` and takes the minimum. Same mode decision, so
+  identical output; strict equivalence `SAME` on 64,908 inputs. Bytecode 3,698 → 3,790 bytes.
+  Warm-up coverage unchanged except two plain assignments. Reverted; only this log ships.
+- **Measured:** base `c8a4f82` (PR #44, `BASE=perf/name-cache-markup-out`) → candidate
+  `c8a4f82`+dirty; workerd 1.20260815.1. Quick (`svg,soap,s3-ascii,entities,rss-ascii`; 10 cold /
+  4 warm): warm s3-ascii −3.0% 🟢 (−3.6…−2.4), entities −2.9%, soap −1.8%, svg −2.5% (isolates
+  −1.0/−1.5/−8.5/+1.3), rss-ascii −0.8% (⚪); cold svg −3.2% (−7.6…+1.0), rss-ascii −7.2% (±11),
+  s3-ascii −1.3%, soap +2.1%, entities +2.0% (all ⚪). No full run, no encoding/bytes checks.
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** real but small. svg's per-line refresh saves less than the profile suggested, and when a
+  document has no tab, the tab memo scans to its end once per parse (≈1% of a 100 KB parse).
+  About −1…−3% warm is ≈ −1…−2% cold after the 92 extra bytecode bytes are compiled, under the
+  gate's 3%.
+- **Retry if:** combined with another small warm win on the same paths, or if a document class
+  with many attribute-bearing lines (svg-like) is added to the gate. A variant without the tab
+  memo's full scan (for example, tabs checked per value only when the value is long) was not
+  tried.
