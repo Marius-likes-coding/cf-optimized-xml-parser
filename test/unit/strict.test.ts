@@ -6,6 +6,8 @@ const attributes = (count: number): string =>
   `<a ${Array.from({ length: count }, (_, index) => `a${String(index)}="1"`).join(" ")}/>`;
 const name = (length: number): string => "n".repeat(length);
 const doctype = (size: number): string => `<!DOCTYPE a [${" ".repeat(size)}]><a/>`;
+const many = (count: number): string =>
+  Array.from({ length: count }, (_, index) => `a${String(index)}="1"`).join(" ");
 
 describe("normalization", () => {
   it(String.raw`turns \r\n and \r into \n in text, CDATA, comments and PI data`, () => {
@@ -161,9 +163,6 @@ describe("repeated names", () => {
 // Attribute names that repeat a cached element's are matched without the duplicate and
 // maxAttributes checks (they can't fail there); every other case must still run them.
 describe("predicted attributes", () => {
-  const many = (count: number): string =>
-    Array.from({ length: count }, (_, index) => `a${String(index)}="1"`).join(" ");
-
   it("rejects a duplicate after predicted names", () => {
     expect(() => parse('<r><e x="1" y="2"/><e x="1" y="2" x="3"/></r>')).toThrow(
       /duplicate attribute/,
