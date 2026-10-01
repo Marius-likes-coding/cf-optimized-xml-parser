@@ -1,0 +1,637 @@
+{
+  "kind": "local",
+  "timestamp": "2026-10-01T09:33:45.144Z",
+  "base": {
+    "ref": "HEAD^1",
+    "sha": "30037ae",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/.bench/base/src/index.ts"
+  },
+  "candidate": {
+    "ref": "working tree",
+    "sha": "e0ca77a",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/src/index.ts"
+  },
+  "shard": null,
+  "fixtures": [
+    "rss-ascii",
+    "soap",
+    "rss-poison",
+    "s3-ascii",
+    "rss-small",
+    "ooxml-ascii",
+    "rss-crlf",
+    "sitemap",
+    "svg",
+    "entities"
+  ],
+  "cpu": "AMD EPYC 7763 64-Core Processor | AMD EPYC 9V45 96-Core Processor | AMD EPYC 9V74 80-Core Processor",
+  "bundleHash": "09ca6af25a9d, 13201a294ae0",
+  "coldBundleHash": "c42005f82832",
+  "workerd": "1.20260815.1",
+  "flags": "--no-concurrent-recompilation --no-concurrent-sparkplug --no-maglev-build-code-on-background --no-maglev-deopt-data-on-background --no-lazy-compile-dispatcher --no-parallel-compile-tasks-for-eager-toplevel --no-parallel-compile-tasks-for-lazy",
+  "compatibilityDate": "2026-08-01",
+  "rows": [
+    {
+      "metric": "total-100",
+      "fixture": "rss-ascii",
+      "unit": "ms",
+      "base": 62.638888888888886,
+      "cand": 58.111111111111114,
+      "changePct": -7.228381374722826,
+      "lowPct": -9.98685939553219,
+      "highPct": -4.115044247787614,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "shape": {
+        "length": 113798,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.55,
+          "early": 1.4444444444444444,
+          "later": 0.5364814814814814
+        },
+        "cand": {
+          "first": 2.6666666666666665,
+          "early": 1.451851851851852,
+          "later": 0.48314814814814816
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-poison",
+      "unit": "ms",
+      "base": 69.16666666666667,
+      "cand": 63.916666666666664,
+      "changePct": -7.590361445783145,
+      "lowPct": -10.992063492063487,
+      "highPct": -4.091653027823227,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "shape": {
+        "length": 113798,
+        "twoByte": true
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.7,
+          "early": 1.5740740740740742,
+          "later": 0.5846296296296296
+        },
+        "cand": {
+          "first": 2.8,
+          "early": 1.5648148148148149,
+          "later": 0.5325925925925926
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-small",
+      "unit": "ms",
+      "base": 7.722222222222222,
+      "cand": 8.11111111111111,
+      "changePct": 5.035971223021574,
+      "lowPct": -6.930693069306926,
+      "highPct": 17.46031746031744,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "inconclusive",
+      "shape": {
+        "length": 3478,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 1.2666666666666666,
+          "early": 0.43703703703703706,
+          "later": 0.028888888888888888
+        },
+        "cand": {
+          "first": 1.1833333333333333,
+          "early": 0.4222222222222222,
+          "later": 0.03351851851851852
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-crlf",
+      "unit": "ms",
+      "base": 38.138888888888886,
+      "cand": 35.77777777777778,
+      "changePct": -6.190823015294966,
+      "lowPct": -11.590106007067147,
+      "highPct": -0.8196721311475419,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "shape": {
+        "length": 115158,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 1.55,
+          "early": 0.8722222222222222,
+          "later": 0.3238888888888889
+        },
+        "cand": {
+          "first": 1.6,
+          "early": 0.8648148148148148,
+          "later": 0.2974074074074074
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "svg",
+      "unit": "ms",
+      "base": 106.38888888888889,
+      "cand": 91.83333333333333,
+      "changePct": -13.681462140992174,
+      "lowPct": -15.954998721554581,
+      "highPct": -11.408152461619903,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "shape": {
+        "length": 135212,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 5.583333333333333,
+          "early": 4.944444444444445,
+          "later": 0.6407407407407407
+        },
+        "cand": {
+          "first": 5.366666666666666,
+          "early": 4.477777777777778,
+          "later": 0.5196296296296297
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "soap",
+      "unit": "ms",
+      "base": 71.63888888888889,
+      "cand": 65.86111111111111,
+      "changePct": -8.065141527723918,
+      "lowPct": -9.992343032159267,
+      "highPct": -6.176700547302572,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "shape": {
+        "length": 107370,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.3666666666666667,
+          "early": 3.2,
+          "later": 0.44037037037037036
+        },
+        "cand": {
+          "first": 3.6666666666666665,
+          "early": 3.214814814814815,
+          "later": 0.36907407407407405
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "s3-ascii",
+      "unit": "ms",
+      "base": 63.75,
+      "cand": 59.30555555555556,
+      "changePct": -6.971677559912848,
+      "lowPct": -9.348561759729279,
+      "highPct": -4.808548530721279,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "shape": {
+        "length": 101228,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.5166666666666666,
+          "early": 2.948148148148148,
+          "later": 0.38037037037037036
+        },
+        "cand": {
+          "first": 3.716666666666667,
+          "early": 2.937037037037037,
+          "later": 0.3227777777777778
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "ooxml-ascii",
+      "unit": "ms",
+      "base": 79.16666666666667,
+      "cand": 74.13888888888889,
+      "changePct": -6.350877192982463,
+      "lowPct": -8.719533127360112,
+      "highPct": -3.76821898329186,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "shape": {
+        "length": 86940,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.65,
+          "early": 3.414814814814815,
+          "later": 0.5038888888888889
+        },
+        "cand": {
+          "first": 4,
+          "early": 3.3185185185185184,
+          "later": 0.44981481481481483
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "sitemap",
+      "unit": "ms",
+      "base": 41.833333333333336,
+      "cand": 41.22222222222222,
+      "changePct": -1.4608233731739806,
+      "lowPct": -6.095979247730233,
+      "highPct": 3.765690376569042,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 106090,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 2.5,
+          "early": 1.9851851851851852,
+          "later": 0.2414814814814815
+        },
+        "cand": {
+          "first": 2.65,
+          "early": 1.9759259259259259,
+          "later": 0.23148148148148148
+        }
+      }
+    },
+    {
+      "metric": "total-100",
+      "fixture": "entities",
+      "unit": "ms",
+      "base": 76.02777777777777,
+      "cand": 76.30555555555556,
+      "changePct": 0.3653635367190544,
+      "lowPct": -1.7103347889374065,
+      "highPct": 2.4056254626202866,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "shape": {
+        "length": 124824,
+        "twoByte": false
+      },
+      "breakdown": {
+        "base": {
+          "first": 3.183333333333333,
+          "early": 2.3314814814814815,
+          "later": 0.577962962962963
+        },
+        "cand": {
+          "first": 3.55,
+          "early": 2.448148148148148,
+          "later": 0.5624074074074074
+        }
+      }
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-ascii",
+      "unit": "µs",
+      "base": 219.81642736527644,
+      "cand": 204.14079063182467,
+      "changePct": -7.059721677167641,
+      "lowPct": -10.8362219975227,
+      "highPct": -3.364305430692127,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "detail": "-7.1 / -6.7 / +1.7 / -6.5 / -7.3 / -12.1 / -9.8 / -8.2 / -10.5 / -11.1 / -0.5 / -5.7"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-poison",
+      "unit": "µs",
+      "base": 286.91085737791246,
+      "cand": 239.09887530323718,
+      "changePct": -16.046363330210166,
+      "lowPct": -19.147125841366485,
+      "highPct": -13.97859337102979,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "detail": "-16.0 / -14.2 / -14.9 / -18.4 / -15.8 / -13.0 / -18.0 / -12.5 / -18.8 / -15.2 / -21.3 / -14.0"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-small",
+      "unit": "µs",
+      "base": 8.028655796633,
+      "cand": 8.184936080288447,
+      "changePct": 3.150034781871458,
+      "lowPct": -0.7908876981684965,
+      "highPct": 11.437499403103214,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "detail": "+4.0 / +0.7 / +3.8 / +6.7 / +1.8 / +2.7 / +3.5 / -3.9 / -2.5 / +15.8 / +2.6 / +3.8"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-crlf",
+      "unit": "µs",
+      "base": 104.68278518732394,
+      "cand": 96.91301101763247,
+      "changePct": -7.6204139271802145,
+      "lowPct": -8.986583971905372,
+      "highPct": -5.811502626868759,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "detail": "-8.8 / -8.0 / -5.3 / -7.3 / -8.5 / -10.0 / -7.2 / -10.2 / -7.2 / -6.9 / -8.0 / -3.8"
+    },
+    {
+      "metric": "warm",
+      "fixture": "svg",
+      "unit": "µs",
+      "base": 627.5477645205127,
+      "cand": 516.583409791158,
+      "changePct": -17.720142563530295,
+      "lowPct": -19.412392166933866,
+      "highPct": -15.865908322289869,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "detail": "-20.1 / -17.5 / -17.0 / -19.8 / -18.0 / -14.3 / -15.9 / -18.5 / -15.8 / -17.0 / -19.4 / -19.1"
+    },
+    {
+      "metric": "warm",
+      "fixture": "soap",
+      "unit": "µs",
+      "base": 421.98835543890306,
+      "cand": 352.9475055878026,
+      "changePct": -16.369400660901746,
+      "lowPct": -17.742426568302307,
+      "highPct": -15.012795098082531,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "detail": "-14.5 / -18.5 / -19.3 / -13.9 / -18.4 / -16.2 / -15.3 / -14.2 / -18.0 / -15.6 / -15.8 / -16.4"
+    },
+    {
+      "metric": "warm",
+      "fixture": "s3-ascii",
+      "unit": "µs",
+      "base": 315.6717018076358,
+      "cand": 270.6620791197773,
+      "changePct": -14.12962447808952,
+      "lowPct": -18.118115528576272,
+      "highPct": -9.982133287499472,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "detail": "-16.4 / -6.6 / -11.9 / -15.7 / -9.6 / -15.5 / -18.0 / -11.7 / -22.7 / -5.9 / -24.1 / -9.3"
+    },
+    {
+      "metric": "warm",
+      "fixture": "ooxml-ascii",
+      "unit": "µs",
+      "base": 459.2452195308326,
+      "cand": 403.06024079397974,
+      "changePct": -12.259154280607177,
+      "lowPct": -14.411292000814758,
+      "highPct": -10.06211776737973,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "detail": "-9.1 / -16.0 / -13.4 / -10.8 / -14.8 / -9.6 / -9.4 / -10.2 / -16.0 / -10.8 / -16.0 / -10.6"
+    },
+    {
+      "metric": "warm",
+      "fixture": "sitemap",
+      "unit": "µs",
+      "base": 196.58963085049345,
+      "cand": 183.18976260949046,
+      "changePct": -6.794605076875948,
+      "lowPct": -8.492113741298668,
+      "highPct": -5.266511545438945,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "detail": "-8.2 / -6.9 / -6.2 / -6.0 / -5.0 / -7.5 / -7.0 / -8.4 / -7.3 / -6.9 / -7.0 / -5.1"
+    },
+    {
+      "metric": "warm",
+      "fixture": "entities",
+      "unit": "µs",
+      "base": 382.725310826761,
+      "cand": 361.35592322447474,
+      "changePct": -5.527410687489487,
+      "lowPct": -7.138168442588588,
+      "highPct": -3.0906939246641896,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "faster",
+      "detail": "-8.6 / -4.9 / -5.7 / -9.0 / -6.9 / -4.8 / -5.6 / -2.1 / -5.9 / -4.3 / -3.7 / -4.6"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-ascii",
+      "unit": "KB",
+      "base": 106.25390625,
+      "cand": 77.66015625,
+      "changePct": -26.910775339141946,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-poison",
+      "unit": "KB",
+      "base": 106.40625,
+      "cand": 77.77734375,
+      "changePct": -26.90528634361233,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-small",
+      "unit": "KB",
+      "base": 5.94140625,
+      "cand": 3.01171875,
+      "changePct": -49.30966469428007,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-crlf",
+      "unit": "KB",
+      "base": 106.25390625,
+      "cand": 77.66015625,
+      "changePct": -26.910775339141946,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "svg",
+      "unit": "KB",
+      "base": 333.40234375,
+      "cand": 219.14453125,
+      "changePct": -34.27024873756606,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "soap",
+      "unit": "KB",
+      "base": 271.0078125,
+      "cand": 191.51953125,
+      "changePct": -29.33062354060365,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "s3-ascii",
+      "unit": "KB",
+      "base": 175.44921875,
+      "cand": 130.21875,
+      "changePct": -25.779806300790387,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "ooxml-ascii",
+      "unit": "KB",
+      "base": 313.421875,
+      "cand": 220.0625,
+      "changePct": -29.787127972481176,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "sitemap",
+      "unit": "KB",
+      "base": 269.71484375,
+      "cand": 213.55859375,
+      "changePct": -20.82060046055585,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "entities",
+      "unit": "KB",
+      "base": 302.2578125,
+      "cand": 276.44921875,
+      "changePct": -8.538602703610842,
+      "gated": false,
+      "status": "info"
+    }
+  ],
+  "notes": [
+    "Measured on 5 runners in parallel, each fixture's base and candidate on the same one (AMD EPYC 7763 64-Core Processor; AMD EPYC 9V45 96-Core Processor; AMD EPYC 9V74 80-Core Processor)."
+  ],
+  "accepted": false,
+  "regressions": 0,
+  "shards": [
+    {
+      "shard": "1/5",
+      "fixtures": [
+        "rss-ascii",
+        "soap"
+      ],
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "bundleHash": "09ca6af25a9d, 13201a294ae0"
+    },
+    {
+      "shard": "2/5",
+      "fixtures": [
+        "rss-poison",
+        "s3-ascii"
+      ],
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "bundleHash": "09ca6af25a9d, 13201a294ae0"
+    },
+    {
+      "shard": "3/5",
+      "fixtures": [
+        "rss-small",
+        "ooxml-ascii"
+      ],
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "bundleHash": "09ca6af25a9d, 13201a294ae0"
+    },
+    {
+      "shard": "4/5",
+      "fixtures": [
+        "rss-crlf",
+        "sitemap"
+      ],
+      "cpu": "AMD EPYC 9V45 96-Core Processor",
+      "bundleHash": "09ca6af25a9d, 13201a294ae0"
+    },
+    {
+      "shard": "5/5",
+      "fixtures": [
+        "svg",
+        "entities"
+      ],
+      "cpu": "AMD EPYC 9V74 80-Core Processor",
+      "bundleHash": "09ca6af25a9d, 13201a294ae0"
+    }
+  ]
+}
