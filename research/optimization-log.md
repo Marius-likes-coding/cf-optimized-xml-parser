@@ -233,3 +233,34 @@ Rejected in the M7 performance pass (2026-09-29, workerd 1.20260815.1, V8 15.1);
   first — indentation here is 2–6 chars), or V8 ever makes sticky `test()` cheaper than a short
   integer loop. Note for future loops: S1's builtin advantage is for long scans and low tiers;
   at the top tier on short runs, plain integer loops win.
+
+### 2026-09-30: Skip redundant normalize() calls in parseString (failed)
+
+- **Hypothesis:** Every text segment and attribute value without special characters pays a
+  `normalize()` call that immediately returns its input (mode RAW). Skipping the call at the
+  two hottest sites (text path, attribute-value path) removes per-segment call overhead in all
+  tiers, like the 2026-09-30 entity-decoding entry did inside `decodeEntities`. Text-heavy
+  (rss, sitemap, entities) and attribute-heavy (svg) fixtures should improve; `parseString`
+  grows by two branches, which the dead-code ablation showed is harmless for s3-cold.
+- **Change:** `src/parse-string.ts` only, one round: `mode === RAW ? slice : normalize(slice,
+  mode)` at the text site and the attribute-value site. Identical output (`normalize` returns
+  its input for RAW — same reference). Comment/CDATA/PI sites left alone (rare). All reverted;
+  only this log ships.
+- **Measured:** base `3eb36ce` → candidate `3eb36ce`+dirty; workerd 1.20260815.1.
+  Quick (`rss-ascii,svg,s3-ascii,sitemap,entities`; 10 cold / 4 warm): cold all ⚪ same
+  (rss-ascii −3.0%, svg −1.9%, s3-ascii +3.3% with CI spanning ±7, sitemap +0.2%,
+  entities −2.7%, all CIs wide and crossing 0); warm all within ±1% and split across isolates
+  (rss-ascii +0.9%, svg −0.8%, s3-ascii +0.4%, sitemap +0.3%, entities −0.8%) — no signal in
+  either direction. Equiv `SAME` on 5,427 inputs; `typecheck` + `lint` pass. No full run (no
+  quick signal), no encoding/bytes checks (reverted).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the targeted cost does not exist: V8 inlines the 3-line `normalize()` into its
+  callers in every tier, so there is no per-segment call overhead to remove — the ternary only
+  adds a branch. Together with the entity-decoding entry (where only the `startsWith`→integer
+  removal moved anything), the lesson is that per-segment/per-entity *call* overhead is ~0
+  across the parser; what remains per segment is slices, concatenations, builtin scans and the
+  required checks.
+- **Retry if:** never for call-skipping of tiny helpers (inlining already does it). Future loops
+  should target fewer builtin scans, fewer allocations, or compile time — not calls/branches.
+  Combining this with the entity-decoding dispatch was considered and rejected: this part
+  contributes ~0%, so the combination would re-measure −3.8% and still miss the gate.
