@@ -19,8 +19,6 @@ import type { XmlDocument, XmlElement, XmlNode } from "./types.js";
 /** XML 1.0 (5th ed.) §2.3 Name = NameStartChar NameChar*. Sticky; used with test() only. */
 const NAME_RE =
   /[:A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}][\w.:\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C-\u200D\u203F-\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}-]*/uy;
-/** Next tab, newline or CR, for attribute-value normalization (global: test() + lastIndex). */
-const WS_RE = /[\t\n\r]/g;
 /** XMLDecl content after "<?xml": version, then optional encoding and standalone (§2.8, §4.3.3). */
 const DECLARATION_RE =
   /^version[\t\n\r ]*=[\t\n\r ]*(["'])(1\.\d+)\1(?:[\t\n\r ]+encoding[\t\n\r ]*=[\t\n\r ]*(["'])[A-Za-z][\w.-]*\3)?(?:[\t\n\r ]+standalone[\t\n\r ]*=[\t\n\r ]*(["'])(?:yes|no)\4)?[\t\n\r ]*$/;
@@ -214,7 +212,10 @@ export function parseString(
   if (cr === -1) cr = length;
   let cdataEnd = xml.indexOf("]]>");
   if (cdataEnd === -1) cdataEnd = length;
+  // Next tab, newline or CR (the nearest of three memos), for attribute-value normalization.
   let tabOrBreak = -1;
+  let tab = -1;
+  let lineFeed = -1;
   let lt = xml.indexOf("<");
   if (lt === -1) fail("no root element", xml, 0);
   const bom = xml.charCodeAt(0) === 0xfe_ff ? 1 : 0;
@@ -414,8 +415,21 @@ export function parseString(
       const valueEnd = xml.indexOf(ch === 34 ? '"' : "'", valueStart);
       if (valueEnd === -1) fail("unterminated attribute value", xml, p);
       if (tabOrBreak < valueStart) {
-        WS_RE.lastIndex = valueStart;
-        tabOrBreak = WS_RE.test(xml) ? WS_RE.lastIndex - 1 : length;
+        // indexOf per character instead of one /[\t\n\r]/ search: a regex call costs several
+        // times an indexOf, and only the memos that fell behind are refreshed.
+        if (lineFeed < valueStart) {
+          lineFeed = xml.indexOf("\n", valueStart);
+          if (lineFeed === -1) lineFeed = length;
+        }
+        if (tab < valueStart) {
+          tab = xml.indexOf("\t", valueStart);
+          if (tab === -1) tab = length;
+        }
+        if (cr < valueStart) {
+          cr = xml.indexOf("\r", valueStart);
+          if (cr === -1) cr = length;
+        }
+        tabOrBreak = Math.min(lineFeed, tab, cr);
       }
       if (amp < valueStart) {
         amp = xml.indexOf("&", valueStart);
