@@ -48,6 +48,12 @@ const NO_ELEMENT: XmlElement = { name: "/", attrs: null, children: null };
  * accept/reject stays the same; the cache is emptied at the end of every parse.
  */
 const recent: XmlElement[] = Array.from({ length: 256 }, () => NO_ELEMENT);
+/**
+ * The four characters after "<" of each cached element's start tag, two per int (UTF-16 code
+ * units). A name of up to four characters is then checked by two compares instead of a slice.
+ */
+const windowLow = new Int32Array(256);
+const windowHigh = new Int32Array(256);
 /** Slots of `recent` that hold an element, so the end of a parse resets only those. */
 const usedSlots: number[] = [0];
 
@@ -62,6 +68,8 @@ export function resetParser(): void {
   frameStack.length = 0;
   seenNames.clear();
   recent.fill(NO_ELEMENT);
+  windowLow.fill(0);
+  windowHigh.fill(0);
   usedSlots.length = 0;
 }
 
@@ -136,6 +144,9 @@ function markup(
 ): XmlNode | null {
   const length = xml.length;
   if (xml.charCodeAt(lt + 1) === 33) {
+    // parseString checked "<!-" only: "<!-" without a second "-" is no comment, and no other
+    // markup declaration either.
+    if (xml.charCodeAt(lt + 3) !== 45) fail("unknown markup declaration", xml, lt);
     const end = xml.indexOf("-->", lt + 4);
     if (end === -1) fail("unterminated comment", xml, lt);
     if (xml.indexOf("--", lt + 4) < end || (end > lt + 4 && xml.charCodeAt(end - 1) === 45))
@@ -218,7 +229,10 @@ export function parseString(
   let lineFeed = -1;
   let lt = xml.indexOf("<");
   if (lt === -1) fail("no root element", xml, 0);
-  const bom = xml.charCodeAt(0) === 0xfe_ff ? 1 : 0;
+  // Not charCodeAt(): Turbofan compiles every charCodeAt() site into a loop of its own (see the
+  // CDATA check), which isn't worth it for a check that runs once per parse.
+  // eslint-disable-next-line @typescript-eslint/prefer-string-starts-ends-with -- see above
+  const bom = xml.slice(0, 1) === "\uFEFF" ? 1 : 0;
   let textStart = bom;
 
   for (;;) {
@@ -289,7 +303,9 @@ export function parseString(
       lt = xml.indexOf("<", textStart);
       continue;
     }
-    if (c === 63 || (c === 33 && xml.charCodeAt(lt + 2) === 45 && xml.charCodeAt(lt + 3) === 45)) {
+    // "<!-" goes to markup(), which checks the second "-" (comments are rare; one charCodeAt()
+    // site less here, see the CDATA check).
+    if (c === 63 || (c === 33 && xml.charCodeAt(lt + 2) === 45)) {
       // Comment or PI: a few per document, so they are compiled in markup(), not here.
       const node = markup(xml, lt, cr, maxNameLength, bom);
       cr = markupCr;
@@ -302,7 +318,9 @@ export function parseString(
       continue;
     }
     if (c === 33) {
-      if (xml.startsWith("[CDATA[", lt + 2)) {
+      // slice + === instead of startsWith(): Turbofan inlines a constant startsWith() as one
+      // character read per character, ~1.2 ms of compile per site (synthetic, workerd 1.20260815).
+      if (xml.slice(lt + 2, lt + 9) === "[CDATA[") {
         if (open.length === 0) fail("CDATA section outside the root element", xml, lt);
         const end = xml.indexOf("]]>", lt + 9);
         if (end === -1) fail("unterminated CDATA section", xml, lt);
@@ -317,7 +335,7 @@ export function parseString(
           lastText = true;
         }
         textStart = end + 3;
-      } else if (xml.startsWith("DOCTYPE", lt + 2)) {
+      } else if (xml.slice(lt + 2, lt + 9) === "DOCTYPE") {
         if (root !== null || seenDoctype) fail("DOCTYPE after the root or repeated", xml, lt);
         seenDoctype = true;
         DOCTYPE_HEAD_RE.lastIndex = lt + 9;
@@ -330,12 +348,12 @@ export function parseString(
 
     // Start tag. A cache hit needs the same characters and then one that ends a name: NAME_RE
     // would match exactly the cached name there.
-    const slot =
-      ((c << 6) ^
-        (xml.charCodeAt(lt + 2) << 4) ^
-        (xml.charCodeAt(lt + 3) << 2) ^
-        xml.charCodeAt(lt + 4)) &
-      255;
+    const c2 = xml.charCodeAt(lt + 2);
+    const c3 = xml.charCodeAt(lt + 3);
+    const c4 = xml.charCodeAt(lt + 4);
+    const slot = ((c << 6) ^ (c2 << 4) ^ (c3 << 2) ^ c4) & 255;
+    const low = c | (c2 << 16);
+    const high = c3 | (c4 << 16);
     const similar = recent[slot] as XmlElement;
     let name = similar.name;
     let p = lt + 1 + name.length;
@@ -343,9 +361,12 @@ export function parseString(
     let predicted: string[] | null = similar.attrs;
     // Set on any miss: the cache then takes this element, so its attribute names predict next.
     let missed = false;
+    // Equal windows check the first four characters, so a name of up to four needs no slice.
     if (
+      windowLow[slot] !== low ||
+      windowHigh[slot] !== high ||
       (ch !== 62 && ch !== 32 && ch !== 47 && ch !== 10 && ch !== 9 && ch !== 13) ||
-      xml.slice(lt + 1, p) !== name
+      (name.length > 4 && xml.slice(lt + 1, p) !== name)
     ) {
       NAME_RE.lastIndex = lt + 1;
       if (!NAME_RE.test(xml)) fail("invalid or missing element name", xml, lt);
@@ -455,14 +476,25 @@ export function parseString(
     }
     const node: XmlElement = {
       name,
-      attrs: aTop > 0 ? attributeScratch.slice(0, aTop) : null,
+      // A single attribute (the most common count) as an array literal: an inline allocation
+      // instead of a slice() builtin call.
+      attrs:
+        aTop === 0
+          ? null
+          : aTop === 2
+            ? [attributeScratch[0] as string, attributeScratch[1] as string]
+            : attributeScratch.slice(0, aTop),
       children: null,
     };
     if (open.length === 0) {
       if (root !== null) fail("more than one root element", xml, lt);
       root = node;
     }
-    if (missed) recent[slot] = node;
+    if (missed) {
+      recent[slot] = node;
+      windowLow[slot] = low;
+      windowHigh[slot] = high;
+    }
     scratch[top++] = node;
     lastText = false;
     if (!selfClosing) {
@@ -489,6 +521,11 @@ export function parseString(
   open.length = 0;
   frames.length = 0;
   seenNames.clear();
-  while (usedSlots.length > 0) recent[usedSlots.pop() as number] = NO_ELEMENT;
+  while (usedSlots.length > 0) {
+    const used = usedSlots.pop() as number;
+    recent[used] = NO_ELEMENT;
+    windowLow[used] = 0;
+    windowHigh[used] = 0;
+  }
   return { root, children };
 }

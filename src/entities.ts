@@ -47,45 +47,32 @@ export function decodeEntities(
   while (amp < end) {
     out += normalize(source.slice(pos, amp), mode);
     const head = source.charCodeAt(amp + 1);
+    const second = source.charCodeAt(amp + 2);
+    const third = source.charCodeAt(amp + 3);
     let semi: number;
     // Named references pin the position of ";", so they need no indexOf(): no name character is
     // ";", so the first ";" after "&" is right after the name, as the search would find. `end` is
     // a "<", a quote or the end of the input, so a match never runs past it. Integer compares,
-    // not startsWith() calls, as for numeric references.
-    if (
-      head === 97 &&
-      source.charCodeAt(amp + 2) === 109 &&
-      source.charCodeAt(amp + 3) === 112 &&
-      source.charCodeAt(amp + 4) === 59
-    ) {
+    // not startsWith() calls, as for numeric references; each character is read once, because
+    // Turbofan compiles every charCodeAt() site into a loop of its own.
+    if (head === 97 && second === 109 && third === 112 && source.charCodeAt(amp + 4) === 59) {
       out += "&";
       semi = amp + 4;
-    } else if (
-      head === 113 &&
-      source.charCodeAt(amp + 2) === 117 &&
-      source.charCodeAt(amp + 3) === 111 &&
-      source.charCodeAt(amp + 4) === 116 &&
-      source.charCodeAt(amp + 5) === 59
-    ) {
-      out += '"';
-      semi = amp + 5;
-    } else if (
-      (head === 108 || head === 103) &&
-      source.charCodeAt(amp + 2) === 116 &&
-      source.charCodeAt(amp + 3) === 59
-    ) {
+    } else if ((head === 108 || head === 103) && second === 116 && third === 59) {
       out += head === 108 ? "<" : ">";
       semi = amp + 3;
     } else if (
-      head === 97 &&
-      source.charCodeAt(amp + 2) === 112 &&
-      source.charCodeAt(amp + 3) === 111 &&
-      source.charCodeAt(amp + 4) === 115 &&
-      source.charCodeAt(amp + 5) === 59
+      (head === 113 && second === 117 && third === 111) ||
+      (head === 97 && second === 112 && third === 111)
     ) {
-      out += "'";
-      semi = amp + 5;
-    } else {
+      // "&quot;" or "&apos;", or something else that starts like them.
+      const fourth = source.charCodeAt(amp + 4);
+      if (source.charCodeAt(amp + 5) === 59 && fourth === (head === 113 ? 116 : 115)) {
+        out += head === 113 ? '"' : "'";
+        semi = amp + 5;
+      } else semi = -1;
+    } else semi = -1;
+    if (semi === -1) {
       semi = source.indexOf(";", amp + 1);
       if (semi === -1 || semi >= end) fail("unterminated entity reference", source, amp);
       if (head !== 35)
@@ -96,7 +83,7 @@ export function decodeEntities(
         );
       // The isXmlChar() range check is inlined: it runs once per numeric reference and the call
       // overhead shows next to the digit loop.
-      const hex = source.charCodeAt(amp + 2) === 120;
+      const hex = second === 120;
       let digit = amp + (hex ? 3 : 2);
       if (digit === semi) fail("empty character reference", source, amp);
       let code = 0;

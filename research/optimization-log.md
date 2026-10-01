@@ -996,3 +996,42 @@ paired bench (no intervals) and can't be re-scored.
 - **Retry if:** combined with another win for namespaced documents (ooxml, soap), or if the
   ~2% warm cost on unrelated documents is explained and avoided. The diffs (r1, r2) are
   small; r2's one-attribute literal is the safer half.
+
+### 2026-10-01: Three near-misses combined — compile diet, short-name windows, one-attribute literal (accepted)
+
+- **Hypothesis:** Three logged near-misses have overlapping wins and no shared cost:
+  - the compile diet (slice-based CDATA/DOCTYPE/BOM checks, comment "-" check in `markup()`, shared
+    character reads in `decodeEntities`): 1–3 ms less Turbofan compile, no warm cost;
+  - name-cache windows (four characters after "<" stored per slot; names of up to four
+    characters checked without a slice): warm rss −3.5%, ooxml −3.7%;
+  - the one-attribute literal: warm soap −5.9%, ooxml −4.3%.
+  Each failed the gate alone, mostly with cold in the 1–3% band. Together the warm wins should
+  put a fixture's cold change past 3% with its warm CI below 0. The "Retry if" lines of the
+  compile-diet and small-array entries ask for exactly this.
+- **Change:** `src/parse-string.ts` and `src/entities.ts`, one round: the compile-diet diff, the
+  name-cache window diff (v2 of the slice-free name checks entry) and r2 of the small-array
+  entry, applied unchanged to main `8127824`. No new path for the warm-up: block coverage leaves
+  the same plain assignments unrun as main.
+- **Measured:** base `8127824` (main) → candidate +dirty; workerd 1.20260815.1. Equivalence
+  `SAME` on 5,427 and 64,908 inputs (full messages), 160,000 attribute, 200,000 entity and
+  100,000 markup/BOM documents.
+  Quick (`rss-ascii,svg,ooxml-ascii,soap,s3-ascii,sitemap`; 10/4): warm ooxml −9.6%, soap −5.2%,
+  rss −4.3% (🟢), others −0.8…−2.1%; cold ooxml −8.3%, svg −3.9%, rss −3.7% (⚪).
+  Full (60 cold / 12 warm): cold ooxml-ascii −5.3% 🟢 (−7.4…−3.0), svg −2.0% (−3.5…−0.5),
+  rss-small −3.3%, rss-ascii −2.7%, rss-crlf −2.5%, rss-poison −0.6%, s3 −0.2%, soap +0.2%,
+  entities +0.4%, sitemap +1.1% — all ⚪ but ooxml, no 🟡/🔴. Warm ooxml −9.2%, soap −4.8%,
+  rss-ascii −4.5%, rss-crlf −3.9%, rss-poison −3.7% (🟢), s3 −2.1%, rss-small −2.1%, sitemap
+  −1.6%, entities −1.4%, svg −1.2% (⚪); every warm row negative.
+  Encodings: cold rss-cjk −5.9% 🟢, ooxml-cjk −4.1% 🟢, rss-latin1 −2.2%, s3-cjk −1.1%; warm
+  ooxml-cjk −9.1%, rss-cjk −4.0%, rss-latin1 −3.8% (🟢), s3-cjk −2.6%. `src/decode.ts` untouched.
+  Lint, typecheck, 163 unit tests, fuzz, size (9 kB brotlied), conformance 1263/1736 = main.
+- **CI:** perf-local watched before merge (required: no 🔴 row and ooxml-ascii total-100 🟢
+  again); `perf-remote` label not added.
+- **Why:** the parts don't interfere. The compile diet removes compile on rss and svg, the
+  windows remove slices on short element names (ooxml `w:t`/`w:r`/`w:p`/`w:b`, rss `link`/
+  `guid`/`item`), and the literal removes a `slice()` call per single-attribute element
+  (ooxml, soap). The ~2% warm cost on s3/sitemap that the literal showed alone is gone in the
+  combination (−2.1%/−1.6% warm): those were codegen shifts, and this build of `parseString`
+  lays out differently.
+- **Retry if:** accepted. Note for future loops: near-misses whose wins land on the same fixtures
+  are worth combining. Single changes now land at 1–3%, the band the 3% gate can't confirm.
