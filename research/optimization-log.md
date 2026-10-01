@@ -451,3 +451,79 @@ paired bench (no intervals) and can't be re-scored.
   same traces: `decodeEntities` deopts once in Maglev during parse 1 at `source.length` (the
   "no further `&`" branch, reached only at the document's last entity; s3, sitemap, entities;
   ~0.5 ms, under the gate on its own).
+
+### 2026-10-01: Comments and PIs outside parseString's top-tier compile (failed)
+
+- **Hypothesis:** After the previous entry, every fixture pays exactly one Turbofan compile of
+  `parseString`. It is the largest single item in `total-100`: rss ~22 ms of ~60, svg 25–30 of
+  ~120, s3/soap ~15 of 65–75 (per-request traces). Turbofan inlines only `normalize` here
+  (`--trace-turbo-inlining`), so the compile is `parseString` itself, and its time tracks the
+  paths a document has run: s3/soap ~15 ms; rss, which adds comments, CDATA and PIs, ~22; svg,
+  which also has a DOCTYPE, ~27. Comment and PI handling (~900 of 4,140 bytecode bytes) runs a
+  few times per document but is compiled in full. Moved into one helper larger than Turbofan's
+  460-byte inlining limit (`--max-inlined-bytecode-size`), it is called instead of compiled:
+  a few ms less compile on every fixture, most where comments or PIs exist (rss, svg). The
+  helper must not be small: a small once-per-parse helper is inlined without feedback and
+  deoptimizes (previous entry). CDATA stays inline (one per RSS item), and so does DOCTYPE
+  (svg only, ~140 bytes).
+- **Change:** `src/parse-string.ts`, three rounds, all reverted; only this log ships.
+  (r1) New `markup(xml, lt, cr, maxNameLength, bom)` (834 bytecode bytes) with the comment and
+  PI branches verbatim (declaration check included). It returns the node, or null for the
+  declaration, and reports the end position and the updated `\r` memo in two module-level
+  numbers, so no node reference outlives a parse. `parseString` (4,140 → 3,193 bytes) calls it
+  from one site, `c === 63 || <!--`, ahead of the CDATA/DOCTYPE branch.
+  (r2) Same helper, but main's branch structure kept exactly: two call sites, the comment one
+  inside `c === 33` and the PI one in `c === 63` (`parseString` 3,249 bytes).
+  (r3) Only the PI branch outlined (helper 588 bytes, `parseString` 3,495); comment inline
+  again.
+  Equiv `SAME` on 5,427 inputs in every round. No warm-up change was needed: block coverage of
+  `warmup()` left only error paths, two `cr = length` assignments and a comment containing CR
+  unrun in `markup()`, the same as in `parseString`.
+- **Measured:** base `a2c6f26` → candidate `a2c6f26`+dirty; workerd 1.20260815.1.
+  r1 traces (Turbofan compile of `parseString`, 3 fresh isolates each, ms): rss-ascii
+  22.0/24.3/24.7 → 16.1/17.7/16.0, svg 28.3/26.0/25.4 → 20.3/20.3/20.7, s3-ascii
+  15.8/15.2/20.2 → 14.3/12.0/11.7, soap 15.4/15.5/18.2 → 12.2/12.1/12.0; Maglev compiles
+  −0.5 ms.
+  r1 quick (`rss-ascii,svg,soap`; 10 cold / 4 warm): cold svg −5.6% 🟢, rss-ascii −6.0% and
+  soap −5.4% ⚪ (CIs crossing 0); warm ⚪ (rss-ascii +2.7%, svg −0.2%, soap +0.6%).
+  r1 full (60 cold / 12 warm): cold rss-ascii −11.2% 🟢 (−16.4…−5.6), rss-poison −8.7% 🟢,
+  rss-small −14.2% 🟢, rss-crlf −6.1% 🟢, svg −6.9% 🟢 (−8.7…−5.2), soap −6.2% 🟢, s3-ascii
+  −6.4% 🟢, ooxml-ascii −4.6% ⚪, sitemap −3.4% ⚪, entities −4.4% ⚪.
+  Warm: all ⚪, but rss is slower with CIs above 0: rss-ascii +2.3% (+0.2…+4.5), rss-poison
+  +1.5%, rss-small +2.0%, rss-crlf +1.2%. Also soap +0.9%, sitemap +0.9%, s3-ascii +0.6%,
+  ooxml-ascii +0.5%, entities +0.3%, svg −0.6%. Memory unchanged.
+  r1 encodings: cold rss-latin1 −12.3% 🟢, rss-cjk −11.7% 🟢, ooxml-cjk −2.4% ⚪, s3-cjk −3.8% ⚪;
+  warm **rss-latin1 +2.8% 🟡 slower** (+0.8…+5.2, 11/12 isolates positive), rss-cjk +1.5%,
+  s3-cjk +1.8%, ooxml-cjk +0.1%.
+  A warm CPU profile of rss-latin1 (6,000 parses) put `markup` at 0.2% of samples, so the
+  helper's own work isn't the cost.
+  r2 quick (`rss-latin1,rss-ascii,s3-cjk`; 10 cold / 12 warm): cold rss-latin1 −9.3% 🟢,
+  rss-ascii −11.3%, s3-cjk −6.2% (⚪, CIs crossing 0); warm rss-latin1 +2.3% (+0.1…+4.6),
+  rss-ascii +1.5% (+0.4…+2.8), s3-cjk +1.0%: main's branch structure doesn't remove it.
+  r3 quick (`rss-latin1,rss-ascii,svg`; 10 cold / 12 warm): cold all ⚪ (rss-latin1 −6.9%,
+  rss-ascii −2.4%, svg −4.5%); warm rss-latin1 +2.4%, rss-ascii +2.1% (+0.1…+3.2; 11/12
+  isolates positive), svg −2.3% (one −25.9 isolate).
+  Encoding and bytes checks for r2/r3 not run (failed on the warm rows; `src/decode.ts`
+  untouched).
+- **CI:** not opened (failed locally; no perf PR).
+- **Why:** the compile saving is real and large (−3…−8 ms of Turbofan compile per isolate;
+  −6…−14% `total-100` on 9 of 14 rows in r1). But every packaging also makes rss warm ~2%
+  slower, at or just past the 🟡 line. The hot paths are byte-identical in source in r2/r3
+  and the helper's own time is negligible. So the loss is in how Turbofan compiles the smaller
+  `parseString` (register allocation, block layout), which no source change tried here
+  controls. The cost lands on text-heavy pretty-printed RSS (CDATA per item, whitespace text,
+  entities in links), and svg is slightly faster: it isn't the extra call per document.
+- **Retry if:** the warm loss can be explained and avoided. One way to look: compare
+  `parseString`'s optimized code (size, spills) on rss between base and r2. That needs a V8
+  build with `--print-opt-code`, which release workerd lacks. Or if a V8 update changes
+  Turbofan's codegen for this loop, or if the gate starts weighing cold above warm.
+  Notes for future loops:
+  (1) Per-request Turbofan compile time (`--trace-opt`, 3 fresh isolates) is a precise way to
+  measure compile-side ideas; `total-100` alone can't resolve 2–3 ms.
+  (2) Also tried while choosing this idea, and not pursued: earlier tier-up (simulated with
+  halved `--invocation-count-for-*` budgets, which is what a smaller `parseString` buys).
+  Maglev then arrives by OSR during parse 1 and deoptimizes three times on paths parse 1
+  hadn't reached ("insufficient type feedback"). `total-100` didn't improve (svg 124/118 vs
+  123/115, s3 72/72 vs 66/64).
+  (3) `spikes/m7-profile.mjs` no longer starts: workerd 1.20260815.1's V8 rejects
+  `--no-lazy-source-positions`. Drop the flag to use it (outside this loop's scope to fix).
