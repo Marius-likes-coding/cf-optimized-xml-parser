@@ -338,3 +338,43 @@ Rejected in the M7 performance pass (2026-09-29, workerd 1.20260815.1, V8 15.1);
   branches. Precedent set here: exactly one documented full re-run is allowed when a run is
   degraded (2× absolutes), reporting every table — not shopping, since the repeat can (and
   here did) fail.
+
+### 2026-09-30: Drop startsWith in the end-tag and entity hot paths (accepted)
+
+- **Hypothesis:** Combining the two near-misses (the prompt blesses this): the 2026-09-30
+  end-tag entry (slice + `===`, capped at −4.8% soap) and the entity-decoding entries (first-char
+  dispatch, capped at −3.8% entities) remove the same cost — `startsWith` call overhead — on
+  disjoint paths, so they stack. s3-ascii (end-tag −4.2% plus 800 `&quot;` dispatches) should
+  clear −5% total-100; soap and entities improve secondarily. No new functions, no per-item
+  branches beyond restructured (predictable) ones.
+- **Change:** `src/entities.ts`: first-character dispatch with integer compares instead of the
+  named-entity `startsWith` chain (size pins the length, so matching the rest is exact) and the
+  `isXmlChar()` range check inlined into the numeric branch with the helper deleted.
+  `src/parse-string.ts`: end-tag match via `xml.slice(lt + 2, lt + 2 + name.length) !== name`
+  instead of `startsWith(name, lt + 2)` (identical accept/reject, slice clamps like
+  `startsWith`). No warm-up change: every restructured branch (all five named references,
+  numeric decimal/hex, end tags) is already reached by both warm-up documents in both string
+  representations.
+- **Measured:** base `c60d285` → candidate; workerd 1.20260815.1.
+  Quick (10 cold / 4 warm): cold entities −5.3% (CI crossing 0), s3-ascii −4.3%, sitemap −3.1%,
+  soap −2.6%, svg −2.3% — all same-direction, none 🟢; warm s3-ascii −3.9%, entities −3.4%,
+  soap −3.3%, sitemap −2.0% (all with CIs below 0, 4/4 isolates negative), svg +0.2%.
+  Full (60 cold / 12 warm): cold soap −5.4% (−8.1…−2.3) 🟢, s3-ascii −5.5% (−7.7…−3.0) 🟢,
+  entities −5.8% (−8.9…−2.3) 🟢, rss-crlf −4.9%, sitemap −3.3%, rss-ascii −2.9%,
+  rss-poison −3.0%, ooxml-ascii −1.9%, svg −1.2%, rss-small −5.3% (CI spanning ±15,
+  inconclusive as always) — no 🟡/🔴; warm s3-ascii −4.6%, entities −3.6%, soap −3.1%,
+  rss-crlf −3.7%, rss-small −3.4%, rss-ascii −2.3%, rss-poison −1.6%, sitemap −1.8%,
+  ooxml-ascii +0.8% and svg −0.3% (both ⚪ same, under the gate); memory unchanged everywhere
+  (rss-ascii −2.2% baseline offset).
+  Encodings (`rss-latin1,rss-cjk,ooxml-cjk,s3-cjk`): cold and warm all ⚪ same, no 🟡/🔴
+  (two-byte fixtures improve too: rss-cjk cold −3.2%, s3-cjk warm −3.2% on 12/12 isolates).
+  `src/decode.ts` untouched, so no bytes-input check needed.
+- **CI:** perf-local watched before merge (required: no 🔴 row and at least one of the local
+  🟢 total-100 rows 🟢 again); `perf-remote` label not added (report-only).
+- **Why:** the two overheads stack as predicted (each part measured separately in its own
+  entry). `startsWith` — positional or chained — costs ~one slow call per use in every tier;
+  integer compares and `slice` + `===` do not. Entity-free, attribute-heavy docs (svg, ooxml)
+  gain least (end-tag half only, minus slice allocation on long names: warm +0.8%/−0.3%).
+- **Retry if:** accepted — future loops build on this. Revisit only if V8 intrinsifies
+  positional `startsWith` (then the end-tag half is obsolete) or speeds string equality
+  past slicing (then reformulate).

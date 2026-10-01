@@ -25,17 +25,6 @@ export function normalize(text: string, mode: number): string {
  */
 export let ampAfter = 0;
 
-function isXmlChar(code: number): boolean {
-  return (
-    code === 9 ||
-    code === 10 ||
-    code === 13 ||
-    (code >= 0x20 && code <= 0xd7_ff) ||
-    (code >= 0xe0_00 && code <= 0xff_fd) ||
-    (code >= 0x1_00_00 && code <= 0x10_ff_ff)
-  );
-}
-
 /**
  * Text of `source[start, end)` with the five predefined entities and character references
  * expanded, and the literal text between them normalized per `mode`. `amp` is the first "&" in
@@ -56,7 +45,13 @@ export function decodeEntities(
     const semi = source.indexOf(";", amp + 1);
     if (semi === -1 || semi >= end) fail("unterminated entity reference", source, amp);
     const size = semi - amp;
-    if (source.charCodeAt(amp + 1) === 35) {
+    // First-character dispatch with integer compares instead of startsWith() calls: one call
+    // saved per entity in every tier. Equivalent: size pins the length between "&" and ";", so
+    // matching the remaining characters is exact (out-of-bounds charCodeAt is NaN, like a
+    // failed startsWith). The isXmlChar() range check is likewise inlined: it runs once per
+    // numeric reference and the call overhead shows next to the digit loop.
+    const head = source.charCodeAt(amp + 1);
+    if (head === 35) {
       const hex = source.charCodeAt(amp + 2) === 120;
       let digit = amp + (hex ? 3 : 2);
       if (digit === semi) fail("empty character reference", source, amp);
@@ -69,13 +64,41 @@ export function decodeEntities(
         else fail("invalid character reference", source, amp);
         if (code > 0x10_ff_ff) fail("character reference out of range", source, amp);
       }
-      if (!isXmlChar(code)) fail("character reference to a character XML forbids", source, amp);
+      if (!(
+        code === 9 ||
+        code === 10 ||
+        code === 13 ||
+        (code >= 0x20 && code <= 0xd7_ff) ||
+        (code >= 0xe0_00 && code <= 0xff_fd) ||
+        (code >= 0x1_00_00 && code <= 0x10_ff_ff)
+      ))
+        fail("character reference to a character XML forbids", source, amp);
       out += String.fromCodePoint(code);
-    } else if (size === 3 && source.startsWith("lt", amp + 1)) out += "<";
-    else if (size === 3 && source.startsWith("gt", amp + 1)) out += ">";
-    else if (size === 4 && source.startsWith("amp", amp + 1)) out += "&";
-    else if (size === 5 && source.startsWith("quot", amp + 1)) out += '"';
-    else if (size === 5 && source.startsWith("apos", amp + 1)) out += "'";
+    } else if (size === 3 && head === 108 && source.charCodeAt(amp + 2) === 116) out += "<";
+    else if (size === 3 && head === 103 && source.charCodeAt(amp + 2) === 116) out += ">";
+    else if (
+      size === 4 &&
+      head === 97 &&
+      source.charCodeAt(amp + 2) === 109 &&
+      source.charCodeAt(amp + 3) === 112
+    )
+      out += "&";
+    else if (
+      size === 5 &&
+      head === 113 &&
+      source.charCodeAt(amp + 2) === 117 &&
+      source.charCodeAt(amp + 3) === 111 &&
+      source.charCodeAt(amp + 4) === 116
+    )
+      out += '"';
+    else if (
+      size === 5 &&
+      head === 97 &&
+      source.charCodeAt(amp + 2) === 112 &&
+      source.charCodeAt(amp + 3) === 111 &&
+      source.charCodeAt(amp + 4) === 115
+    )
+      out += "'";
     else
       fail(
         "unknown entity (only &lt; &gt; &amp; &quot; &apos; and character references)",
