@@ -19,7 +19,7 @@ import { resolve } from "node:path";
 
 import { mulberry32 } from "./bench-stats.mjs";
 import { PROD_FLAGS, PROFILES } from "./v8-profiles.mjs";
-import { bundleWorker, inspect, startWorkerd } from "./workerd-run.mjs";
+import { bundleWorker, inspect, startBenchWorkerd, startWorkerd } from "./workerd-run.mjs";
 
 export * from "./bench-stats.mjs";
 
@@ -173,52 +173,107 @@ export async function buildBenchWorker(variants, options) {
   return { script, hash };
 }
 
-/** One /run request against a local workerd Worker. */
-async function run(worker, query) {
-  const response = await worker.fetch(`http://bench/run?${new URLSearchParams(query)}`);
-  const text = await response.text();
-  if (!response.ok) throw new Error(`/run ${response.status}: ${text.slice(0, 200)}`);
-  return JSON.parse(text);
-}
+/** Requests without a parse after each cold isolate's parses; their median is the request overhead. */
+const OVERHEAD_REQUESTS = 10;
+const median = (values) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = sorted.length >> 1;
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
 
 /**
- * Cold cost in fresh isolates, production JIT flags. Per fixture, `isolates` fresh isolates per
- * variant, interleaved; each gets `parses` sequential requests with one parse each, as real
- * traffic sends them. The Worker times each parse with its 1 ms clock; the ticks are unbiased on
- * average, and the total over 100 parses and 20 isolates is precise to about 1%.
+ * Cold cost in fresh isolates, production JIT flags. Per fixture it runs batches; each batch is
+ * a fresh workerd process with `isolates` isolates per variant, interleaved, and batch b loads
+ * `scripts[b % scripts.length]` (pass both copy orders). Each isolate gets one request without a
+ * parse (it builds the input as a fetch() body and compiles the bench Worker's own code), then
+ * `parses` sequential requests with one parse each, as real traffic sends them, then
+ * OVERHEAD_REQUESTS requests without a parse.
+ *
+ * Timing: the CPU time of workerd's JavaScript thread per request, read from /proc between
+ * requests (Linux), minus the batch's median request without a parse. That is the CPU the parse
+ * itself cost, including its compiles and GC on that thread, which is how Cloudflare bills a
+ * request. The Worker's own clock ticks in whole ms, which gave each isolate's total 5–10% noise
+ * and biased single parses; it stays in `clock` as a cross-check, and is the fallback off Linux.
+ *
+ * Runs `batches` batches per fixture, then more while `more(batchesSoFar, seconds)` returns true.
+ * Returns per fixture { fixture, shape, timing, batches: [{ order, overheadMs, seconds, byKey }] },
+ * byKey[key] = { totals, clock, first, early, later } (ms; totals and clock per isolate).
  */
-export async function measureCold({ script, keys, fixtures, isolates, parses, input = "string" }) {
+export async function measureCold({
+  scripts,
+  keys,
+  fixtures,
+  isolates,
+  parses,
+  input = "string",
+  batches = 1,
+  more,
+}) {
   const results = [];
   for (const fixture of fixtures) {
-    const names = Array.from({ length: isolates * keys.length }, (_, index) => `cold${index}`);
-    const mf = await startWorkerd({ script, names, flags: PROD_FLAGS });
-    try {
-      const byKey = Object.fromEntries(
-        keys.map((key) => [key, { totals: [], first: [], early: [], later: [] }]),
-      );
-      let shape;
-      for (let sample = 0; sample < isolates; sample++) {
-        for (let step = 0; step < keys.length; step++) {
-          // Rotate both the order and the worker slot, so no variant is tied to one of them.
-          const slot = (sample + step) % keys.length;
-          const worker = await mf.getWorker(names[sample * keys.length + step]);
-          const times = [];
-          for (let index = 0; index < parses; index++) {
-            const body = await run(worker, { v: keys[slot], fixture, count: 1, input });
-            times.push(body.ms);
-            shape ??= { length: body.length, twoByte: body.twoByte };
+    const list = [];
+    let shape;
+    let timing;
+    const started = Date.now();
+    for (let batch = 0; batch < batches || more?.(list, (Date.now() - started) / 1000); batch++) {
+      const batchStart = Date.now();
+      const order = batch % scripts.length;
+      const names = Array.from({ length: isolates * keys.length }, (_, index) => `cold${index}`);
+      const workerd = await startBenchWorkerd({
+        workers: names.map((name) => ({ name, script: scripts[order] })),
+        flags: PROD_FLAGS,
+      });
+      const { cpuNs } = workerd;
+      timing = cpuNs ? "thread-cpu" : "worker-clock";
+      const raw = [];
+      const overhead = [];
+      try {
+        for (let sample = 0; sample < isolates; sample++) {
+          for (let step = 0; step < keys.length; step++) {
+            // Rotate both the order and the worker slot, so no variant is tied to one of them.
+            const key = keys[(sample + step) % keys.length];
+            const name = names[sample * keys.length + step];
+            await workerd.call(name, { v: key, fixture, count: 0, input });
+            const cpu = [];
+            const clock = [];
+            for (let index = 0; index < parses; index++) {
+              const before = cpuNs?.();
+              const body = await workerd.call(name, { v: key, fixture, count: 1, input });
+              cpu.push(cpuNs ? (cpuNs() - before) / 1e6 : body.ms);
+              clock.push(body.ms);
+              shape ??= { length: body.length, twoByte: body.twoByte };
+            }
+            if (cpuNs) {
+              for (let index = 0; index < OVERHEAD_REQUESTS; index++) {
+                const before = cpuNs();
+                await workerd.call(name, { v: key, fixture, count: 0, input });
+                overhead.push((cpuNs() - before) / 1e6);
+              }
+            }
+            raw.push({ key, cpu, clock });
           }
-          const target = byKey[keys[slot]];
-          target.totals.push(times.reduce((a, b) => a + b, 0));
-          target.first.push(times[0]);
-          target.early.push(...times.slice(1, 10));
-          target.later.push(...times.slice(10));
         }
+      } finally {
+        await workerd.dispose();
       }
-      results.push({ fixture, shape, byKey });
-    } finally {
-      await mf.dispose();
+      // One overhead estimate per batch, from all its isolates: it is the same for every variant,
+      // and a per-isolate median of 10 requests would add noise.
+      const overheadMs = overhead.length > 0 ? median(overhead) : 0;
+      const byKey = Object.fromEntries(
+        keys.map((key) => [key, { totals: [], clock: [], first: [], early: [], later: [] }]),
+      );
+      for (const { key, cpu, clock } of raw) {
+        const net = cpu.map((value) => value - overheadMs);
+        const target = byKey[key];
+        target.totals.push(net.reduce((a, b) => a + b, 0));
+        target.clock.push(clock.reduce((a, b) => a + b, 0));
+        target.first.push(net[0]);
+        target.early.push(...net.slice(1, 10));
+        target.later.push(...net.slice(10));
+      }
+      list.push({ order, overheadMs, seconds: (Date.now() - batchStart) / 1000, byKey });
     }
+    results.push({ fixture, shape, timing, batches: list });
   }
   return results;
 }
@@ -227,9 +282,11 @@ export async function measureCold({ script, keys, fixtures, isolates, parses, in
  * Warm per-parse cost, production JIT flags. Two copies of the same parser in one isolate can
  * settle a few percent apart (their JIT and GC state differs; far more on Cloudflare), so the
  * isolate is the unit of replication: `scripts` are bench Workers with different copy orders,
- * `isolates` isolates alternate between them, and each measures every fixture with interleaved
- * ~burstMs bursts. `warmupRounds` rounds run first and are discarded, so tier-up compiles stay
- * out of the samples. Returns, per fixture, the µs per parse of each variant and round in each
+ * isolate i loads `scripts[i % scripts.length]`, and each measures every fixture with
+ * interleaved ~burstMs bursts. `warmupRounds` rounds run first and are discarded, so tier-up
+ * compiles stay out of the samples. Bursts are timed like cold parses: the CPU time of workerd's
+ * JavaScript thread minus the isolate's median request without a parse, or the Worker's 1 ms
+ * clock off Linux. Returns, per fixture, the µs per parse of each variant and round in each
  * isolate.
  *
  * The schedule is random: each round runs the variants in random order, and each burst's size
@@ -252,45 +309,61 @@ export async function measureWarm({
     name: `warm${index}`,
     script: scripts[index % scripts.length],
   }));
-  const mf = await startWorkerd({ workers, flags: PROD_FLAGS });
+  const workerd = await startBenchWorkerd({ workers, flags: PROD_FLAGS });
+  const { cpuNs } = workerd;
   const results = [];
   try {
-    const handles = await Promise.all(workers.map((w) => mf.getWorker(w.name)));
+    // Request overhead per isolate (CPU timing only; the Worker's clock excludes it).
+    const overheadMs = [];
+    for (const { name } of workers) {
+      const samples = [];
+      for (let index = 0; index < 3 * OVERHEAD_REQUESTS && cpuNs; index++) {
+        const before = cpuNs();
+        await workerd.call(name, { v: keys[0], fixture: fixtures[0], count: 0, input });
+        samples.push((cpuNs() - before) / 1e6);
+      }
+      overheadMs.push(samples.length > 0 ? median(samples.slice(OVERHEAD_REQUESTS)) : 0);
+    }
+    const timed = async (index, query) => {
+      const before = cpuNs?.();
+      const body = await workerd.call(workers[index].name, query);
+      return cpuNs ? (cpuNs() - before) / 1e6 - overheadMs[index] : body.ms;
+    };
     for (const fixture of fixtures) {
       const random = mulberry32(
         [...fixture].reduce((hash, char) => Math.imul(hash, 31) + char.codePointAt(0), 7),
       );
       // Burst size per isolate and variant, so one burst takes about burstMs.
       const counts = [];
-      for (const worker of handles) {
+      for (const index of workers.keys()) {
         const perKey = {};
         for (const key of random() < 0.5 ? keys : keys.toReversed()) {
           let count = 1;
-          let { ms } = await run(worker, { v: key, fixture, count, input });
+          let ms = await timed(index, { v: key, fixture, count, input });
           while (ms < burstMs / 4 && count < 1_000_000) {
             count *= 4;
-            ({ ms } = await run(worker, { v: key, fixture, count, input }));
+            ms = await timed(index, { v: key, fixture, count, input });
           }
           perKey[key] = Math.max(1, Math.round((count * burstMs) / Math.max(ms, 1)));
         }
         counts.push(perKey);
       }
-      const perIsolate = handles.map(() => Object.fromEntries(keys.map((key) => [key, []])));
+      const perIsolate = workers.map(() => Object.fromEntries(keys.map((key) => [key, []])));
       // Round-robin over isolates too, so machine drift hits all of them alike.
       for (let round = 0; round < warmupRounds + rounds; round++) {
-        for (const [index, worker] of handles.entries()) {
+        for (const index of workers.keys()) {
           for (const key of random() < 0.5 ? keys : keys.toReversed()) {
             const scale = 1 + jitter * (2 * random() - 1);
             const count = Math.max(1, Math.round(counts[index][key] * scale));
-            const { ms } = await run(worker, { v: key, fixture, count, input });
+            const ms = await timed(index, { v: key, fixture, count, input });
             if (round >= warmupRounds) perIsolate[index][key].push((ms * 1000) / count);
           }
         }
       }
-      results.push({ fixture, perIsolate });
+      results.push({ fixture, perIsolate, timing: cpuNs ? "thread-cpu" : "worker-clock" });
     }
   } finally {
-    await mf.dispose();
+    await workerd.dispose();
   }
   return results;
 }

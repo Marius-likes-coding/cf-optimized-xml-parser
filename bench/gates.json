@@ -12,17 +12,31 @@
       "sitemap",
       "entities"
     ],
-    "shards": 5,
+    "shards": 16,
     "cold": {
       "thresholdPct": 5,
       "improvementPct": 3,
-      "isolates": 60,
-      "parses": 100
+      "parses": 100,
+      "isolatesPerBatch": 20,
+      "batchesPerShard": 2,
+      "local": {
+        "minBatches": 6,
+        "maxBatches": 40,
+        "targetHalfWidthPct": 1,
+        "budgetSec": 240
+      },
+      "perFixture": {
+        "rss-small": {
+          "isolatesPerBatch": 40,
+          "batchesPerShard": 6
+        }
+      }
     },
     "warm": {
       "thresholdPct": 5,
       "improvementPct": 3,
       "isolates": 12,
+      "isolatesPerShard": 1,
       "rounds": 10,
       "burstMs": 100,
       "jitter": 0.2

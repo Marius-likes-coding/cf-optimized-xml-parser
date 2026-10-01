@@ -102,6 +102,91 @@ export function isolateChange(groups, iterations = 4000, seed = 20_260_930) {
   };
 }
 
+/** Student's t quantile (regularized incomplete beta, Numerical Recipes' betacf; bisection). */
+// Lanczos approximation of ln Γ(x), x > 0.
+function logGamma(x) {
+  const c = [
+    76.180_091_729_471_46, -86.505_320_329_416_78, 24.014_098_240_830_91, -1.231_739_572_450_155,
+    0.001_208_650_973_866_179, -5.395_239_384_953e-6,
+  ];
+  let y = x;
+  const tmp = x + 5.5 - (x + 0.5) * Math.log(x + 5.5);
+  let series = 1.000_000_000_190_015;
+  for (const value of c) series += value / ++y;
+  return -tmp + Math.log((2.506_628_274_631_000_7 * series) / x);
+}
+function betaFraction(a, b, x) {
+  let c = 1;
+  let d = 1 / (1 - ((a + b) * x) / (a + 1));
+  let h = d;
+  for (let m = 1; m <= 200; m++) {
+    const m2 = 2 * m;
+    let aa = (m * (b - m) * x) / ((a - 1 + m2) * (a + m2));
+    d = 1 / (1 + aa * d);
+    c = 1 + aa / c;
+    h *= d * c;
+    aa = (-(a + m) * (a + b + m) * x) / ((a + m2) * (a + 1 + m2));
+    d = 1 / (1 + aa * d);
+    c = 1 + aa / c;
+    h *= d * c;
+    if (Math.abs(d * c - 1) < 1e-12) break;
+  }
+  return h;
+}
+function incompleteBeta(a, b, x) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const front = Math.exp(
+    logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x),
+  );
+  return x < (a + 1) / (a + b + 2)
+    ? (front * betaFraction(a, b, x)) / a
+    : 1 - (front * betaFraction(b, a, 1 - x)) / b;
+}
+export function tQuantile(p, df) {
+  const cdf = (t) => 1 - 0.5 * incompleteBeta(df / 2, 0.5, df / (df + t * t));
+  let low = 0;
+  let high = 1e4;
+  for (let index = 0; index < 100; index++) {
+    const middle = (low + high) / 2;
+    if (cdf(middle) < p) low = middle;
+    else high = middle;
+  }
+  return (low + high) / 2;
+}
+
+const sd = (values) => {
+  const m = mean(values);
+  return Math.sqrt(values.reduce((a, b) => a + (b - m) ** 2, 0) / (values.length - 1));
+};
+
+/** Log ratio of one cold batch (one workerd process): trimmed means of the per-isolate totals. */
+export const batchLogRatio = (base, cand) => Math.log(trimmedMean(cand) / trimmedMean(base));
+
+/**
+ * Cold change from batches. Each unit is a list of batch log ratios: one batch per unit when all
+ * batches ran on one machine, or one unit per CI runner. The point estimate is the mean of the
+ * unit means; the interval is a t-interval over units, so differences between workerd
+ * processes and between machines are inside it (a bootstrap over the isolates of one process
+ * missed about 1% of run-to-run noise). Needs at least 2 units.
+ */
+export function unitsChange(units) {
+  const values = units.map((unit) => mean(unit));
+  const center = mean(values);
+  const half =
+    values.length > 1
+      ? (tQuantile(1 - (1 - CONFIDENCE) / 2, values.length - 1) * sd(values)) /
+        Math.sqrt(values.length)
+      : Number.POSITIVE_INFINITY;
+  const pct = (log) => (Math.exp(log) - 1) * 100;
+  return {
+    changePct: pct(center),
+    lowPct: Number.isFinite(half) ? pct(center - half) : -100,
+    highPct: Number.isFinite(half) ? pct(center + half) : 1e6,
+    halfWidthPct: Number.isFinite(half) ? (pct(half) - pct(-half)) / 2 : 1e6,
+  };
+}
+
 export const STATUS = {
   regression: "🔴 regression",
   accepted: "🔴 accepted",
@@ -157,6 +242,71 @@ export function row({
 }
 
 /**
+ * The cold row of one fixture. `units` are lists of batch summaries ({ logRatio, base, cand,
+ * isolates, breakdown }), one list per machine in CI or one batch per unit on one machine.
+ */
+export function coldRow({ fixture, units, gates, shape, timing, detail }) {
+  const batches = units.flat();
+  const stats = unitsChange(units.map((unit) => unit.map((batch) => batch.logRatio)));
+  const breakdown = {};
+  for (const key of ["base", "cand"]) {
+    const parts = batches.map((batch) => batch.breakdown[key]);
+    breakdown[key] = Object.fromEntries(
+      ["first", "early", "later"].map((part) => [part, mean(parts.map((p) => p[part]))]),
+    );
+  }
+  return {
+    ...row({
+      metric: "total-100",
+      fixture,
+      unit: "ms",
+      base: mean(batches.map((batch) => batch.base)),
+      cand: mean(batches.map((batch) => batch.cand)),
+      stats,
+      thresholdPct: gates.cold.thresholdPct,
+      improvementPct: gates.cold.improvementPct,
+      gated: true,
+    }),
+    isolates: batches.reduce((total, batch) => total + batch.isolates, 0),
+    batches: batches.length,
+    shape,
+    timing,
+    breakdown,
+    detail,
+  };
+}
+
+/** The warm row of one fixture from per-isolate rounds ({ base: [µs…], cand: [µs…] }). */
+export function warmRow({ fixture, perIsolate, gates, timing, detail }) {
+  const groups = perIsolate.map((samples) =>
+    samples.base.map((value, index) => [value, samples.cand[index]]),
+  );
+  const { perIsolatePct, ...stats } = isolateChange(groups);
+  return {
+    ...row({
+      metric: "warm",
+      fixture,
+      unit: "µs",
+      base: mean(perIsolate.map((samples) => trimmedMean(samples.base))),
+      cand: mean(perIsolate.map((samples) => trimmedMean(samples.cand))),
+      stats,
+      thresholdPct: gates.warm.thresholdPct,
+      improvementPct: gates.warm.improvementPct,
+      gated: true,
+    }),
+    isolates: perIsolate.length,
+    timing,
+    detail:
+      detail ??
+      perIsolatePct.map((value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)}`).join(" / "),
+  };
+}
+
+/** "AMD", "Intel" or "other", from a CPU model string. */
+export const vendorOf = (cpu = "") =>
+  /\bamd\b/i.test(cpu) ? "AMD" : /\bintel\b/i.test(cpu) ? "Intel" : "other";
+
+/**
  * A cold win below the regression threshold counts as "faster" only if the same fixture's warm
  * row is faster too (CI below 0, any size); otherwise it shows as "same". Cold CIs miss about 1%
  * of run-to-run noise (A/A runs, 2026-10-01), and changes in code shape alone move cold totals by
@@ -201,7 +351,7 @@ const METRIC_TITLES = {
 export function renderReport(report) {
   const where =
     report.kind === "local"
-      ? `Local workerd ${report.workerd}, production JIT flags only`
+      ? `Local workerd ${report.workerd}, production JIT flags only, ${report.timing?.startsWith("thread-cpu") ? "CPU time of workerd's JavaScript thread" : "the Worker's 1 ms clock"}`
       : `Cloudflare Worker \`${report.worker}\``;
   const lines = [
     `### ${report.kind === "local" ? "Local" : "Remote"}: base \`${report.base.sha}\` → candidate \`${report.candidate.sha}\``,
@@ -227,7 +377,7 @@ export function renderReport(report) {
       "",
       `**${METRIC_TITLES[metric]}** (${rows[0].unit}, ${gate})`,
       "",
-      `| fixture | base | candidate | change | ${CONFIDENCE * 100}% CI | status |${detail ? ` per ${report.kind === "remote" ? "Worker" : "isolate"} |` : ""}`,
+      `| fixture | base | candidate | change | ${CONFIDENCE * 100}% CI | status |${detail ? ` ${rows.find((r) => r.detailLabel)?.detailLabel ?? (report.kind === "remote" ? "per Worker" : "per isolate")} |` : ""}`,
       `|---|---:|---:|---:|---|---|${detail ? "---|" : ""}`,
     );
     for (const r of rows) {
