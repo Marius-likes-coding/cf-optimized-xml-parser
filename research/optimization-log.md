@@ -264,3 +264,36 @@ Rejected in the M7 performance pass (2026-09-29, workerd 1.20260815.1, V8 15.1);
   should target fewer builtin scans, fewer allocations, or compile time — not calls/branches.
   Combining this with the entity-decoding dispatch was considered and rejected: this part
   contributes ~0%, so the combination would re-measure −3.8% and still miss the gate.
+
+### 2026-09-30: Per-entity overhead in decodeEntities, completed (failed)
+
+- **Hypothesis:** The 2026-09-30 entity-decoding entry's dispatch (−3.8% entities cold) left two
+  per-entity costs untouched: the `isXmlChar()` call on the numeric path and one fewer module
+  function overall. Removing both completes per-entity overhead removal and should push entities
+  cold over the 5% gate. `parseString` untouched; no warm-up change (same paths).
+- **Change:** `src/entities.ts` only, one round: first-character dispatch with integer compares
+  instead of the `startsWith` chain (as in the earlier entry) plus the `isXmlChar()` range check
+  inlined into the numeric branch and the now-unused helper deleted. All reverted; only this
+  log ships.
+- **Measured:** base `a1a72dc` → candidate `a1a72dc`+dirty; workerd 1.20260815.1.
+  Quick (10 cold / 4 warm): cold sitemap −9.2% (−16.1…−2.6) 🟢 faster, entities −7.6% (CI
+  crossing 0), s3-ascii −2.7%, svg +0.6% — but warm ALL neutral (entities +0.6%,
+  sitemap +1.1% with all isolates ≥ 0, s3-ascii +0.4%, svg +0.6%): a cold 🟢 with no warm
+  correlate and no mechanism (one fewer tiny function cannot save 7 ms — the dead-code
+  ablation proved size moves nothing), i.e. suspect variance, so the full run decides.
+  Full (60 cold / 12 warm): the 🟢 reverses — cold sitemap −0.6%, entities −0.4%, s3-ascii
+  +0.7%, everything ⚪ same, no 🟡/🔴; warm entities −2.5% (−4.1…−0.4, all 12 isolates
+  negative) confirms the dispatch mechanism at ~−2.5% but under the gate; memory unchanged.
+  Equiv `SAME` on 5,427 inputs; `typecheck` + `lint` pass. Encoding/bytes checks not run
+  (reverted). Note: this full run executed on a loaded machine (absolute ms ~50% above the
+  quick runs, e.g. entities base 121 vs 76–81) — relative numbers still hold (interleaved),
+  CIs widen, and the reversal stands.
+- **CI:** not opened (failed in full locally; no perf PR).
+- **Why:** the quick-round 🟢 was variance, caught by the process working as designed: no warm
+  correlate + full reversal. The dispatch mechanism is real but capped (~−2.5% warm-entities,
+  −1…−4% cold — same as the earlier entry), and the `isXmlChar()` inline added nothing measurable
+  (V8 inlines the call at the top tier anyway — yet another instance of "call overhead ~0").
+- **Retry if:** never for per-entity call removal in `decodeEntities` (both calls now proven
+  nil-or-capped). Standing rule for future loops, demonstrated twice (here and sitemap +2.8%
+  on dead code): never trust a quick-round 🟢/🟡 without a matching warm correlate — the full
+  run is the verdict, especially for cold-only movements.
