@@ -1344,3 +1344,41 @@ What that means for the entries below:
   allocation, and `StringAdd` copies short results flat anyway.
 - **Retry if:** never with arrays. A flat result would need a cheaper builder; none exists in
   JavaScript.
+
+### 2026-10-02: Characters after "&" read once in decodeEntities (accepted)
+
+- **Hypothesis:** `decodeEntities` matched the five named references with up to 13
+  `charCodeAt()` sites. Turbofan lowers each site to a loop over V8's string representations
+  and unrolls it, so its top-tier compile was 6.5–6.6 ms on entities (compiled at parse 4) and
+  2.5–3 ms on rss, s3 and sitemap. Reading the four characters after "&" once and sharing them
+  (7 sites) shrinks that compile. Two small savings come with it: "&amp;" keeps its "&" in the
+  preceding slice (one concatenation less), and a value that ends with a reference skips the
+  empty last piece. `parseString` stays unchanged, so its optimized code and layout too (the
+  AMD warm rows that blocked #58 and #62 react to that layout).
+- **Change:** `src/entities.ts`: `head`, `c2`, `c3`, `c4` read at the top of the loop; the
+  "&amp;" branch slices up to and including the "&"; the other branches as before, with the
+  shared reads; the numeric branch uses `c2` for the "x"; `return pos < end ? … : out`.
+  `test/unit/strict.test.ts`: normalization right before and after references (passes on main
+  too).
+- **Measured:** base `2471058` (src as on `81ceb7c`) → candidate; workerd 1.20260815.1,
+  `taskset -c 4,5`. Turbofan compile of `decodeEntities` (2 fresh isolates each): entities
+  6.6 / 6.5 → 5.0 / 5.1 ms, s3 2.9 / 2.8 → 2.7 / 2.7 ms; no new deopt.
+  Quick rounds: cold entities −3.6% 🟢 (−4.5…−2.6, 6 × 20 isolates), sitemap −0.7%, s3 −0.7%,
+  rss-ascii +0.4%, rss-small −0.7%, soap +0.2% (⚪); warm −0.6…+0.4% (⚪).
+  Encodings: cold +0.7 / +0.1 / −0.1 / −0.3%, warm −1.3 / −0.8 / −0.3 / −0.1% (⚪).
+  Equivalence `SAME` on 5,427 inputs, on 32,359 strict inputs (full messages and offsets) and
+  on 60,000 random entity-dense documents. Lint, format, typecheck, 164 unit tests, fuzz, size
+  (8.78 kB), conformance 1263/1736 = main.
+- **CI:** PR #64, 16 runners (15 AMD, 1 Intel). Cold entities −2.2% 🟢 (−2.6…−1.7; warm
+  −2.6%, −4.1…−1.0), all other rows ⚪ within −0.6…+0.2%. Warm all ⚪: rss-ascii −3.0%,
+  rss-crlf −3.0%, s3 −2.6%, sitemap −2.6%, entities −2.6%, ooxml −2.4%, soap −1.9%, rss-small
+  −1.6%, rss-poison −0.9%, svg +0.2%. Retained tree: sitemap −10.9%, rss-ascii −7.8%, rss-crlf
+  −5.2%, rss-poison −5.0% ("&amp;" no longer adds a cons-string node), others ±0.5%. Merged.
+- **Why:** the compile saving (−1.5 ms on entities) is where the cold gain comes from; CI saw
+  −2.2% against −3.6% locally. Warm is a little faster on every fixture with references (one
+  concatenation less per "&amp;", fewer reads per reference), and no row moved the wrong way:
+  `parseString`'s code didn't change.
+- **Retry if:** accepted. Note for future loops: after #58, #62 and the AMD diagnostic run,
+  changes outside `parseString` (decodeEntities, markup, skipDoctype) are the safer place for
+  small compile-time savings; a change that moves code in `parseString` risks warm 🟡 rows on
+  the AMD runners.
