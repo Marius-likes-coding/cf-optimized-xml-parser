@@ -1203,3 +1203,36 @@ What that means for the entries below:
   sequential; flattened warm-up documents may avoid it. The cold gate can't see this (no warm-up).
   (3) A DOCTYPE moved into `markup()` keeps `skipDoctype()` (inlined there) out of the parser's
   Turbofan compile: svg −1…−3 ms of ~24, too little alone.
+
+### 2026-10-02: Indexed open-element stacks instead of push() and pop() (failed)
+
+- **Hypothesis:** The last three entries chased compile time and allocation; this one targets
+  execution in the early tiers. Parses #1 to ~#10 run in Ignition, Sparkplug and Maglev at 2–3×
+  the Turbofan cost per parse, and there each `push()`/`pop()` is a builtin call. The
+  open-element and frame stacks do four per element. Indexed loads and stores with an explicit
+  `depth` counter (`open[depth] = node; frames[depth++] = top`, `open[--depth]`) should cost
+  less there and the same in Turbofan: element-dense documents (s3, sitemap, soap) a little
+  faster.
+- **Change:** `src/parse-string.ts` only: a local `depth` replaces every `open.length`, `push()`
+  and `pop()`; the arrays are still truncated at the start and end of a parse. Equivalence `SAME`
+  on 5,427 inputs. Reverted; only this log ships.
+- **Measured:** base `844b55e` (src as on `81ceb7c`); workerd 1.20260815.1, `taskset -c 4,5`.
+  `bench:ab` per tier (steady state in that tier; its 1 ms clock makes single cells ±3–5%):
+  Ignition s3 −7%, soap −6%, rss −6%, svg +2%; Sparkplug −3…−6%; Maglev soap +5%, svg +4%,
+  rss-ascii +10%, rss-small +9%, s3 −2%; Turbofan ±4%. A second `bench:ab` with arrays pre-sized
+  to 300 entries (every store in bounds, diagnostic only) was no better in Maglev (s3 +20%, rss
+  +6%, rss-small +3%; the indexed version +10%, +2%, +1% in that run), so growth isn't the cost.
+  Quick round (4 × 20 cold isolates, 4 warm; one batch disturbed, absolutes ~20% above earlier
+  runs): cold s3-ascii +1.7% (−17.9…+25.8), soap −1.5%, rss-small −5.0% (−11.3…+1.7), all ⚪;
+  warm s3 +0.5%, soap +1.5%, rss-small +0.3%, all ⚪. Not re-run: the per-tier numbers cap the
+  effect below the gate either way.
+- **CI:** not opened (failed locally).
+- **Why:** the early-tier saving is real but small and confined to the first few parses: about 5%
+  of Ignition and Sparkplug time, which is ~10% of `total-100` (s3: parse #1 ≈ 3.6 ms, parses 2–4
+  ≈ 2 ms each). Maglev, which runs parses ~5–10 of large documents and 90 of 100 of small ones,
+  got slower: it inlines `push()`/`pop()` as array intrinsics, while indexed accesses with a
+  loop-carried index cost bounds checks and an extra live value. Net ≈ −0.7% on s3.
+- **Retry if:** Maglev handles indexed stack accesses as well as `push()`/`pop()` (re-measure the
+  Maglev column), or combined with another early-tier saving. Note for future loops: the cheapest
+  way to judge an early-tier idea is `bench:ab` per tier, then weigh each tier by its share of
+  `total-100` (trace per request: Maglev and Turbofan compile parse numbers).
