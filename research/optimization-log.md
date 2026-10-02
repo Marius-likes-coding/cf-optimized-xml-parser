@@ -1382,3 +1382,55 @@ What that means for the entries below:
   changes outside `parseString` (decodeEntities, markup, skipDoctype) are the safer place for
   small compile-time savings; a change that moves code in `parseString` risks warm 🟡 rows on
   the AMD runners.
+
+### 2026-10-02: Unpredicted attributes of long documents read outside parseString (failed)
+
+- **Hypothesis:** r1 of the 2026-10-01 entry "Skip the duplicate and maxAttributes checks for
+  predicted attribute names" moved the general attribute path out of `parseString` and measured
+  ~4 ms less Turbofan compile on s3 and sitemap, whose only attributes sit on the root. It was
+  rejected because small documents then ran the outlined function in the slow tiers (rss-small
+  +17%); its "Retry if" asks for a version small documents avoid. Here only documents of at
+  least 16 KiB (`MIN_OUTLINE_LENGTH`, the length from which a document reaches Turbofan within
+  100 parses) hand the tag to the outlined function, from the first name the cache didn't
+  predict. Predicted names stay inline, and shorter documents run exactly the old inline code.
+  Expected: s3 and sitemap ~−5% cold, other long documents −1…−3%, short ones unchanged.
+- **Change:** `src/parse-string.ts`: `restOfTag()` parses the rest of a start tag's attributes
+  with every name checked (same checks, same order, same errors) and returns the position,
+  character, attribute count and the five memos through module variables. `parseString` takes
+  `minOutline`, and its miss branch calls `restOfTag()` when `length >= minOutline`. `parse()`
+  passes 16 KiB; `warmup()` alternates 0 and infinity so both paths get feedback (block coverage:
+  only error paths unrun in `restOfTag()`). `test/unit/outline.test.ts`: both paths agree on
+  attribute edge cases and a long document. Bytecode of `parseString` 4,282 → 4,377 bytes (Node's
+  V8). Reverted; only this log ships.
+- **Measured:** base `1ddea42` → candidate; workerd 1.20260815.1, `taskset -c 4,5`.
+  Equivalence: `parseString` with the outlined path forced on vs off, full messages and offsets,
+  four limit settings, fixtures, mutations and truncations: `SAME` on 44,858 inputs; base vs
+  candidate `parse()`: `SAME` on 32,359 strict and 5,427 inputs.
+  Turbofan compile of `parseString` (one fresh isolate each): s3 15.8 → 12.3 ms, sitemap 15.2 →
+  11.5 ms, soap 17.0 → 14.3 ms.
+  Quick rounds (4 × 20 cold, 4 warm): cold s3-ascii −5.6% 🟢, sitemap −5.2% 🟢, soap −1.7%,
+  rss-ascii −1.1%, svg −0.1% (⚪), rss-small +5.0% (🟡 inconclusive, −7.6…+19.3; that round's
+  absolutes ran ~35% high); warm all ⚪ (sitemap +3.8%, −2.1…+10.1). Pooled `bench:cold` on
+  rss-small: +5.7% and −0.4% (2 × 80 isolates), −0.4% (160 isolates; parse #1 +13 µs, parses 2–10
+  +18 µs each, which holds the Maglev compile at parse 9, parses 11–100 −2.2 µs each); s3-small
+  −1.7%, −1.9%. Encodings: cold s3-cjk −5.5% 🟢, ooxml-cjk −1.4%, rss-cjk −0.3%, rss-latin1 +0.0%;
+  warm ooxml-cjk +1.7% (+1.1…+2.4), s3-cjk +1.9% (+0.6…+3.2) (⚪).
+  Lint, format, typecheck, 167 unit tests, fuzz, size (9.48 kB), conformance 1263/1736 = main.
+- **CI:** PR #67, 16 runners (9 AMD, 7 Intel). Cold s3-ascii −5.5% 🟢 (−6.3…−4.6), sitemap −3.3%
+  🟢 (−4.0…−2.6); soap −0.7%, ooxml −0.6%, entities −0.9%, rss-poison −1.0%, rss-ascii −0.6%,
+  svg −0.2%, rss-crlf −0.1% (⚪); **rss-small +3.0% 🟡 slower** (+0.1…+6.0; Intel +4.7%, AMD
+  +1.8%). Warm: soap −3.2% 🟢, s3 −3.0%, sitemap −2.5%, others −0.7…+0.6% (⚪). Memory unchanged.
+  Closed per the merge rule.
+- **Why:** the compile saving shows on the documents it targets (s3, sitemap in CI as locally).
+  rss-small is shorter than 16 KiB and never runs the new call, yet CI measured +3.0%. The only
+  difference for it is `parseString`'s bytecode: the call site in the miss branch (eleven
+  arguments, eight write-backs) and the `outline` flag, +95 bytes that Maglev compiles at parse 9
+  even unexecuted. For rss-small, Maglev's compile is ~45% of `total-100`. The laptop didn't
+  reproduce it (−0.4%, 160 isolates), so this is the likely cause, not a proven one.
+- **Retry if:** the call site can be made nearly free for documents that never take it, or a
+  diagnostic (`perf.yml` dispatch with only an unexecuted block of the same size in the miss
+  branch) shows the rss-small cost has another source. Writing back only the position, character
+  and count (the memos stay behind safely, since every use searches again when behind) saves 17
+  of the 95 bytes, but then a document whose first attributes went through `restOfTag()` searches
+  for tabs to its end once more per parse (svg ~1%). Note for future loops: on CI, rss-small's
+  cold row reacts to added bytecode in `parseString` that it never runs.
