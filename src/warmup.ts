@@ -70,7 +70,15 @@ export function warmup(): void {
   warmed = true;
   try {
     for (let index = 0; index < PARSES; index++) {
-      parseString(index % 2 === 0 ? WARMUP_ONE_BYTE : WARMUP_TWO_BYTE, 256, 200, 1000);
+      // Long documents read unpredicted attributes in restOfTag(), short ones inline: half of
+      // the parses take each path (the last argument is the length from which restOfTag() runs).
+      parseString(
+        index % 2 === 0 ? WARMUP_ONE_BYTE : WARMUP_TWO_BYTE,
+        256,
+        200,
+        1000,
+        index % 4 < 2 ? 0 : Number.POSITIVE_INFINITY,
+      );
     }
     decodeInput(new TextEncoder().encode(WARMUP_TWO_BYTE));
   } finally {

@@ -3,7 +3,7 @@
  * Web APIs only: no `node:*` imports, no `Buffer`. Target: workerd (ES2025).
  */
 import { decodeInput } from "./decode.js";
-import { parseString, resetParser } from "./parse-string.js";
+import { MIN_OUTLINE_LENGTH, parseString, resetParser } from "./parse-string.js";
 import type { ParseOptions, XmlDocument } from "./types.js";
 
 export { XmlError } from "./errors.js";
@@ -63,7 +63,7 @@ export function parse(
   const maxAttributes = limit(options?.maxAttributes, 200, "maxAttributes");
   const maxNameLength = limit(options?.maxNameLength, 1000, "maxNameLength");
   try {
-    return parseString(xml, maxDepth, maxAttributes, maxNameLength);
+    return parseString(xml, maxDepth, maxAttributes, maxNameLength, MIN_OUTLINE_LENGTH);
   } catch (error) {
     resetParser();
     throw error;
