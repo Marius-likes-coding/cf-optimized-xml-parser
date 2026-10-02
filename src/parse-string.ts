@@ -191,13 +191,132 @@ function markup(
   };
 }
 
+/**
+ * parse() reads the attributes that the name cache didn't predict outside parseString() in
+ * documents at least this long. parseString() then never runs that code for them, so its
+ * optimizing compiles leave it out (all of the attribute code in documents whose only
+ * attributes are on the root, such as S3 listings and sitemaps). Shorter documents keep it
+ * inline: they run their first parses in the slow tiers, where an extra function stays slow
+ * longer, and don't reach Turbofan within 100 parses.
+ */
+export const MIN_OUTLINE_LENGTH = 16_384;
+
+/** Set by restOfTag(): where the tag goes on, its attribute count and the updated memos. */
+let restP = 0;
+let restCh = 0;
+let restTop = 0;
+let restAmp = 0;
+let restCr = 0;
+let restLineFeed = 0;
+let restTab = 0;
+let restTabOrBreak = 0;
+
+/**
+ * The attribute list of the start tag at `lt` from `nameStart`, the first name the cache didn't
+ * predict, up to its ">" or "/": parseString()'s loop with every name checked, the same checks
+ * in the same order. `aTop` names and values are already in attributeScratch.
+ */
+function restOfTag(
+  xml: string,
+  lt: number,
+  nameStart: number,
+  aTop: number,
+  maxAttributes: number,
+  maxNameLength: number,
+  amp: number,
+  cr: number,
+  lineFeed: number,
+  tab: number,
+  tabOrBreak: number,
+): void {
+  const length = xml.length;
+  let seenReady = false;
+  let p = nameStart;
+  let ch = 0;
+  for (;;) {
+    const start = p;
+    NAME_RE.lastIndex = start;
+    if (!NAME_RE.test(xml)) fail("invalid or missing attribute name", xml, start);
+    p = NAME_RE.lastIndex;
+    if (p - start > maxNameLength) fail("name longer than maxNameLength", xml, start);
+    ch = xml.charCodeAt(p);
+    const attributeName = xml.slice(start, p);
+    if (aTop < 32) {
+      for (let k = 0; k < aTop; k += 2) {
+        if (attributeScratch[k] === attributeName) fail("duplicate attribute", xml, start);
+      }
+    } else {
+      if (!seenReady) {
+        seenNames.clear();
+        for (let k = 0; k < aTop; k += 2) seenNames.add(attributeScratch[k] as string);
+        seenReady = true;
+      }
+      if (seenNames.has(attributeName)) fail("duplicate attribute", xml, start);
+      seenNames.add(attributeName);
+    }
+    if (aTop === maxAttributes * 2) fail("more attributes than maxAttributes", xml, lt);
+    while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = xml.charCodeAt(++p);
+    if (ch !== 61) fail('missing "=" after attribute name', xml, p);
+    ch = xml.charCodeAt(++p);
+    while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = xml.charCodeAt(++p);
+    if (ch !== 34 && ch !== 39) fail("attribute value not quoted", xml, p);
+    const valueStart = p + 1;
+    const valueEnd = xml.indexOf(ch === 34 ? '"' : "'", valueStart);
+    if (valueEnd === -1) fail("unterminated attribute value", xml, p);
+    if (tabOrBreak < valueStart) {
+      if (lineFeed < valueStart) {
+        lineFeed = xml.indexOf("\n", valueStart);
+        if (lineFeed === -1) lineFeed = length;
+      }
+      if (tab < valueStart) {
+        tab = xml.indexOf("\t", valueStart);
+        if (tab === -1) tab = length;
+      }
+      if (cr < valueStart) {
+        cr = xml.indexOf("\r", valueStart);
+        if (cr === -1) cr = length;
+      }
+      tabOrBreak = Math.min(lineFeed, tab, cr);
+    }
+    if (amp < valueStart) {
+      amp = xml.indexOf("&", valueStart);
+      if (amp === -1) amp = length;
+    }
+    const mode = tabOrBreak < valueEnd ? ATTRIBUTE : RAW;
+    let value: string;
+    if (amp < valueEnd) {
+      value = decodeEntities(xml, valueStart, valueEnd, amp, mode);
+      amp = ampAfter;
+    } else value = normalize(xml.slice(valueStart, valueEnd), mode);
+    attributeScratch[aTop++] = attributeName;
+    attributeScratch[aTop++] = value;
+    p = valueEnd + 1;
+    ch = xml.charCodeAt(p);
+    if (ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13 && ch !== 62 && ch !== 47)
+      fail("missing whitespace between attributes", xml, p);
+    while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = xml.charCodeAt(++p);
+    if (ch === 62 || ch === 47) break;
+  }
+  restP = p;
+  restCh = ch;
+  restTop = aTop;
+  restAmp = amp;
+  restCr = cr;
+  restLineFeed = lineFeed;
+  restTab = tab;
+  restTabOrBreak = tabOrBreak;
+}
+
 export function parseString(
   xml: string,
   maxDepth: number,
   maxAttributes: number,
   maxNameLength: number,
+  minOutline: number,
 ): XmlDocument {
   const length = xml.length;
+  // Long documents read unpredicted attributes in restOfTag() (see MIN_OUTLINE_LENGTH).
+  const outline = length >= minOutline;
   const open = openStack;
   const frames = frameStack;
   open.length = 0;
@@ -379,6 +498,31 @@ export function parseString(
         (ch !== 61 && ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13) ||
         xml.slice(nameStart, p) !== attributeName
       ) {
+        if (outline) {
+          restOfTag(
+            xml,
+            lt,
+            nameStart,
+            aTop,
+            maxAttributes,
+            maxNameLength,
+            amp,
+            cr,
+            lineFeed,
+            tab,
+            tabOrBreak,
+          );
+          p = restP;
+          ch = restCh;
+          aTop = restTop;
+          amp = restAmp;
+          cr = restCr;
+          lineFeed = restLineFeed;
+          tab = restTab;
+          tabOrBreak = restTabOrBreak;
+          missed = true;
+          break;
+        }
         NAME_RE.lastIndex = nameStart;
         if (!NAME_RE.test(xml)) fail("invalid or missing attribute name", xml, nameStart);
         p = NAME_RE.lastIndex;
