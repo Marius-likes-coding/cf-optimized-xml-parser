@@ -32,6 +32,14 @@ describe("normalization", () => {
     expect(doc.root.children).toBe("p\rq\n<");
   });
 
+  it("normalizes literal text right before and after references", () => {
+    const doc = parse('<a t="\r&amp;\t&amp;&quot;\r\n&lt;">\r&amp;\r\n&amp;&gt;x\r&apos;</a>');
+    expect(doc.root.attrs).toEqual(["t", ' & &" <']);
+    expect(doc.root.children).toBe("\n&\n&>x\n'");
+    expect(parse("<a>&amp;</a>").root.children).toBe("&");
+    expect(parse('<a t="x&lt;"/>').root.attrs).toEqual(["t", "x<"]);
+  });
+
   it("reports entity errors at their real position inside normalized text", () => {
     expect(() => parse("<a>x\r\n&bogus;</a>")).toThrow(
       expect.objectContaining({ offset: 6, line: 2, column: 1 }) as XmlError,
