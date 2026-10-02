@@ -1476,3 +1476,25 @@ What that means for the entries below:
   `git status` before committing a multi-file change: a file left unstaged makes CI measure code
   other than the one measured locally. (2) The AMD warm effect looks fixed per build: two runs of
   one build agree, so a second run of a build is no test of it.
+
+### 2026-10-02: Fewer cons-string nodes in decoded values (failed)
+
+- **Hypothesis:** After #64, `decodeEntities` still adds two cons-string nodes per `&lt;`, `&gt;`,
+  `&quot;`, `&apos;` or numeric reference (`out += text; out += "<"`), and they stay in the output.
+  When the text before the reference is shorter than 12 characters, `out += text + "<"` makes one
+  flat copy (V8 copies sums under 13 characters) and a single cons node. The entities fixture is
+  full of such segments (`&lt;p&gt;`, `&lt;b&gt;bold&lt;/b&gt;`), so its retained tree, and with
+  it the scavenger's copying (~7 ms of `total-100`, the most of any fixture), should shrink. A
+  different part than the last two entries (attribute outlining), outside `parseString`.
+- **Change:** `src/entities.ts` only: the text before a non-`&amp;` reference is held in a local
+  and added together with the replacement. `SAME` on 5,427 inputs and 60,000 random entity
+  documents. Reverted; only this log ships.
+- **Measured:** base `7e42d13`; workerd 1.20260815.1, `taskset -c 4,5`. Quick round (6 × 20
+  cold, 4 warm): cold entities +0.9% (−0.5…+2.2), s3-ascii +0.5% (⚪); warm entities −0.3%, s3
+  −1.2% (⚪). Retained tree: **entities 277 → 231 KB (−16.6%)**, s3 unchanged. `bench:ab` per tier
+  was too noisy to use (s3, which this barely touches: Maglev +21%, Turbofan −8%).
+- **CI:** not opened (failed locally).
+- **Why:** the memory saving is real, but CPU doesn't follow: the scavenger copies fewer objects,
+  and the extra flat copy per reference costs about as much as that saves.
+- **Retry if:** retained memory becomes a gated metric (this is a −17% memory win on entity-heavy
+  documents at no CPU cost), or combined with a CPU win in `decodeEntities`.
