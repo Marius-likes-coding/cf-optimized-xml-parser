@@ -126,7 +126,7 @@ const ENCODER = new TextEncoder();
  * whose compile the bytes shrink, so the copy costs more than it saves. Measured on RSS cut to
  * 8, 16, 32 and 64 KB, total of the first 100 parses: +10.7%, -15.4%, -14.4%, -11.7%.
  */
-export const MIN_ASCII_LENGTH = 16_384;
+export const MIN_ASCII_LENGTH = Number.POSITIVE_INFINITY;
 /** Byte buffers up to this length stay for the next parse; larger ones are dropped. */
 const KEEP_BYTES = 1 << 20;
 let asciiBuffer = new Uint8Array(0);
