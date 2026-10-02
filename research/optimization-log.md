@@ -1109,3 +1109,97 @@ What that means for the entries below:
   (3) A warm `--prof --prof-sampling-interval=100` profile gets 10× more ticks than the
   default. Ticks outside V8's code objects can be split by `/proc/<pid>/maps`: on rss, 12.8% land
   in workerd's own C++ code (GC, string search) and 9.5% in libc (`memchr`, `memcpy`).
+
+### 2026-10-02: ASCII input read from a byte copy instead of charCodeAt() (failed)
+
+- **Hypothesis:** A per-request trace of fresh isolates on main put Turbofan's compile of
+  `parseString` at 15–26 ms per isolate (rss-ascii 19–20, svg 23–26, soap 15–16, s3 15,
+  sitemap 15, entities 15, ooxml 19), 20–30% of `total-100`. Turbofan lowers each `charCodeAt()`
+  to a loop over V8's string representations and unrolls it (2026-10-01 diagnostic entry). A
+  synthetic function with 21 reads compiled in 17.8 ms with `charCodeAt()` and in 3.4 ms with
+  `Uint8Array` loads. `TextEncoder.encodeInto()` copies ASCII at memory speed in workerd
+  (3.4 µs per 114 KB in a loop). For ASCII input, a byte copy and a parser that reads `bytes[i]`
+  should compile faster and run faster in every tier: every large ASCII fixture faster; short
+  and non-ASCII documents neutral.
+- **Change:** `src/parse-string.ts`: `parseAscii()`, a copy of `parseString()` without comments in
+  which each `xml.charCodeAt(i)` is `bytes[i]` (strings still come from `xml`; 4,093 vs 4,282
+  bytecode bytes in Node's V8). `asciiBytes()`: `/[^\0-ÿ]/` rules out two-byte strings (it
+  returns at once on a one-byte string), then `encodeInto()` copies into a buffer kept for the
+  next parse (up to 1 MiB), in chunk views made once per buffer, doubling from 1 KiB to 16 KiB.
+  Four zero bytes past the end make reads past the input behave like `charCodeAt()`'s `NaN` in a
+  reused buffer. `parseDocument()` dispatches; `parse()` uses the byte path only for ASCII input
+  of at least 16 KiB (`MIN_ASCII_LENGTH`). `src/warmup.ts`: an ASCII warm-up document goes to
+  `parseAscii()` 6 times. `test/unit/ascii.test.ts`: `parseAscii` stays a mechanical copy of
+  `parseString` (normalized source comparison), both parsers agree on ASCII fixtures, truncations,
+  mutations and a dirty buffer, and `asciiBytes()` handles chunk edges and buffer reuse.
+- **Measured:** base `81ceb7c` → candidate (`a7a255c`); workerd 1.20260815.1; `taskset -c 4,5`.
+  Measurements that shaped the design:
+  - `encodeInto()` cost by input: ASCII one-byte 3.4 µs per 114 KB; a one-byte string converts
+    one character at a time from its first non-ASCII character on (~0.8 ns per character: 73 µs
+    for an `é` at position 1000 of 99 KB); any two-byte string ~2 ns per character (210 µs),
+    wherever its first wide character is. `/[^\0-ÿ]/.test()`: ~0 on one-byte strings,
+    0.43 ns per character up to the first wide character on two-byte ones.
+  - In a fresh request (one call per request, as the cold bench runs), a call costs more than in
+    a loop: one `encodeInto()` ~2–4 µs on 3 KB, the copy of 114 KB ~12 µs, a `subarray()` view
+    per call 1–2 µs. Extra calls with views made once cost ~0.1 µs each, hence the chunk views.
+  - Round 1 (no size threshold, a new view per chunk): quick cold soap −6.7%, rss-ascii −10.5%,
+    svg −7.7%, s3-ascii −7.9%, entities −4.1% (🟢), but rss-small +13.3% 🔴. Pooled `bench:cold`
+    (80 isolates): rss-small +9…+14%, s3-small +11…+12%; a variant that ran the check but always
+    `parseString` showed most of it (+0.55 ms per 100 parses). `bench:ab` per tier: Sparkplug
+    rss-small −4%, Maglev +7% (8.8 → 9.4 µs), Turbofan −14%; rss-ascii −11% in every tier but
+    Maglev (−3%).
+  - Document size (RSS cut at item boundaries, 80 isolates, threshold 0): 8 KB +10.7%, 16 KB
+    −15.4%, 32 KB −14.4%, 64 KB −11.7% `total-100`. 8 KB never reaches Turbofan within 100
+    parses; 16 KB does. Hence `MIN_ASCII_LENGTH` = 16 KiB.
+  - Turbofan compile of the parser (one fresh isolate each): s3 14.7 → 11.7 ms, svg 23.2 → 17.8,
+    rss 19.3 → 14.9, soap 15.4 → 11.0.
+  Round 2 (final design), quick rounds (4 × 20 cold isolates, 4 warm): cold rss-ascii −10.3%,
+  rss-crlf −11.6%, ooxml-ascii −9.6%, s3-ascii −8.0%, svg −7.1%, sitemap −6.7%, soap −6.1%,
+  entities −3.8% (🟢); rss-small +1.2%, rss-poison +1.5% (⚪, both on the unchanged path). Warm
+  rss-ascii −6.3%, s3 −5.2%, ooxml −5.2%, rss-crlf −4.9%, soap −4.7%, svg −3.8%, sitemap −3.1%
+  (🟢); entities −2.3%, rss-small −0.7%, rss-poison +0.2% (⚪).
+  Encodings (`rss-latin1,rss-cjk,ooxml-cjk,s3-cjk`): cold +0.7 / +0.3 / +0.4 / +0.7%, warm
+  +1.4 / +0.3 / +0.6 / +0.7%, all ⚪; rss-latin1 warm +1.4% (+0.7…+2.0) is the one `encodeInto()`
+  call that finds its first `é`. Memory unchanged. Bytes input (`INPUT=bytes bench:cold`):
+  rss-ascii −10%, svg −8.4%, rss-cjk +1.1%.
+  Warm-up: with 10 ASCII warm-up parses, `parseAscii` compiled in Maglev during `warmup()` (5 ms)
+  and deoptimized on the first real document ("wrong map"); with 4, 6 or 8 neither happened, and
+  a sequence of 9 document shapes after `warmup()` showed one Maglev and one Turbofan compile of
+  `parseAscii` and no deopt. `warmup()` costs 2.4 → 3.5 ms per isolate start.
+  Correctness: `equiv` `SAME` on 5,427 inputs; `parseAscii` vs `parseString` called directly,
+  full error messages and offsets, three limit settings: `SAME` on 27,227 inputs and on 36,340
+  truncations over a buffer filled with significant bytes (the first version, without the zero
+  bytes, differed on 512 inputs: a reused buffer held an earlier input past the end). Block
+  coverage of `warmup()`: `parseAscii` leaves the same 38 blocks unrun as `parseString`. Lint,
+  format, typecheck, 170 unit tests, fuzz, size (10.27 kB brotli), conformance 1263/1736 = main.
+- **CI:** PR #58 (commit `a7a255c`, still at `refs/pull/58/head`), 16 runners (15 AMD, 1 Intel).
+  Cold `total-100`: rss-ascii −10.0% (−10.6…−9.4), rss-crlf −8.6%, ooxml-ascii −7.7%, svg −6.9%,
+  sitemap −5.5%, soap −5.4%, s3-ascii −5.3%, entities −3.9% (−4.2…−3.5), all 🟢; rss-poison
+  +0.1% and rss-small +0.6% ⚪. Warm: svg −4.3% and rss-crlf −3.1% 🟢; rss-ascii −2.8%,
+  ooxml −2.6%, entities −1.0%, sitemap +0.4%, soap +0.8%, s3-ascii +1.2%, rss-small +1.9% ⚪;
+  **rss-poison +6.5% 🔴** (+3.1…+10.1; AMD +7.0%, Intel +1.7%). Memory unchanged. Closed per the
+  merge rule (a 🔴 row; third round of the idea).
+- **Why:** the compile saving is real and CPU-independent: every large ASCII fixture gained
+  4–10% cold in CI, close to the laptop's numbers. The warm side differs by CPU. On the Intel
+  laptop, `parseAscii` ran 3–7% faster than `parseString` warm; on the AMD runners the gain
+  mostly disappeared (s3 +1.2%, soap +0.8%). And rss-poison, which never takes the byte path (it
+  is a two-byte string; `parseDocument()` sends it to `parseString()` after a regex that stops at
+  position 472), got 7% slower warm on AMD only. A local warm run with all 10 fixtures, as CI's
+  warm isolates parse them, showed rss-poison −1.5% (Intel). So the cost is probably in how
+  `parseString` is compiled in an isolate where most documents now take `parseAscii` (less and
+  different feedback, a later compile), or in code layout, and the AMD cores are sensitive to it.
+  Not confirmed: no AMD machine to profile on.
+- **Retry if:** the rss-poison warm loss on AMD is explained and avoided. The cold result makes
+  this the largest open lever (the commit applies to main as is). Ways to look: a `perf.yml`
+  dispatch on the AMD runners with diagnostic variants, for example `parseAscii` present but never
+  used (layout and module size only), or warm isolates that parse only rss-poison (feedback mix).
+  Or if the warm gate changes how it weighs one CPU vendor.
+  Notes for future loops:
+  (1) `decodeEntities` still reads with `charCodeAt()` (13 sites; its Turbofan compile is
+  2.5–3 ms on rss/s3/sitemap, 6.6 ms on entities): a byte version is the same idea.
+  (2) On main, `warmup()` leaves `parseString`'s first Maglev compile to the first real
+  document, and that code deoptimizes at once ("wrong map", bytecode offset 2138) and compiles
+  again (~4.8 ms). The warm-up documents are concatenated (cons) strings, real input is
+  sequential; flattened warm-up documents may avoid it. The cold gate can't see this (no warm-up).
+  (3) A DOCTYPE moved into `markup()` keeps `skipDoctype()` (inlined there) out of the parser's
+  Turbofan compile: svg −1…−3 ms of ~24, too little alone.
