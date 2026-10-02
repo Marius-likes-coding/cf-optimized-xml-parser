@@ -69,6 +69,29 @@ describe("well-formedness", () => {
     });
   }
 
+  it("names the problem in markup declarations", () => {
+    for (const [xml, message, offset] of [
+      ["<!-x><a/>", "unknown markup declaration", 0],
+      ["<!-- c --><!DOCTYPE a><!DOCTYPE a><a/>", "DOCTYPE after the root or repeated", 22],
+      ["<a/><!DOCTYPE a>", "DOCTYPE after the root or repeated", 4],
+      ["<!DOCTYPE><a/>", "malformed DOCTYPE", 0],
+      ["<!DOCTYPE a [<a/>", "unterminated DOCTYPE", 9],
+    ] as const) {
+      expect(() => parse(xml)).toThrow(
+        expect.objectContaining({ message: expect.stringContaining(message) as string, offset }),
+      );
+    }
+    const doc = parse(
+      '<?xml version="1.0"?><!-- c --><?p x?><!DOCTYPE a [<!-- ] -->]><!-- d --><a/>',
+    );
+    expect(doc.children.map((node) => (typeof node === "string" ? node : node.name))).toEqual([
+      "#comment",
+      "?p",
+      "#comment",
+      "a",
+    ]);
+  });
+
   const accepts: [string, string][] = [
     [
       "declaration with encoding and standalone",

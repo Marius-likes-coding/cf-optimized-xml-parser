@@ -117,15 +117,17 @@ function skipDoctype(xml: string, start: number): number {
   );
 }
 
-/** Set by markup(): the position after the comment or PI, and the updated "\r" memo. */
+/** Set by markup(): the position after the markup, and the updated "\r" memo. */
 let markupEnd = 0;
 let markupCr = 0;
 
 /**
- * A comment or PI at `lt` ("<!--" or "<?"): the node, or null for the XML declaration. Outside
- * parseString on purpose: these run a few times per document, but parseString's Maglev and
- * Turbofan compiles cost per bytecode byte that ever ran (research/optimization-log.md). This
- * function is larger than Turbofan's inlining limit, so it stays a call.
+ * A comment, PI, DOCTYPE or other declaration at `lt` ("<!" or "<?", but not CDATA): the node,
+ * or null for the XML declaration and the DOCTYPE. `doctypeAllowed` is false after the root or
+ * a first DOCTYPE. Outside parseString on purpose: these run a few times per document, but
+ * parseString's Maglev and Turbofan compiles cost per bytecode byte that ever ran
+ * (research/optimization-log.md), and skipDoctype() would be inlined there. This function is
+ * larger than Turbofan's inlining limit, so it stays a call.
  */
 function markup(
   xml: string,
@@ -133,9 +135,19 @@ function markup(
   cr: number,
   maxNameLength: number,
   bom: number,
+  doctypeAllowed: boolean,
 ): XmlNode | null {
   const length = xml.length;
   if (xml.charCodeAt(lt + 1) === 33) {
+    if (xml.charCodeAt(lt + 2) !== 45 || xml.charCodeAt(lt + 3) !== 45) {
+      if (!xml.startsWith("DOCTYPE", lt + 2)) fail("unknown markup declaration", xml, lt);
+      if (!doctypeAllowed) fail("DOCTYPE after the root or repeated", xml, lt);
+      DOCTYPE_HEAD_RE.lastIndex = lt + 9;
+      if (!DOCTYPE_HEAD_RE.test(xml)) fail("malformed DOCTYPE", xml, lt);
+      markupEnd = skipDoctype(xml, lt + 9);
+      markupCr = cr;
+      return null;
+    }
     const end = xml.indexOf("-->", lt + 4);
     if (end === -1) fail("unterminated comment", xml, lt);
     if (xml.indexOf("--", lt + 4) < end || (end > lt + 4 && xml.charCodeAt(end - 1) === 45))
@@ -289,20 +301,8 @@ export function parseString(
       lt = xml.indexOf("<", textStart);
       continue;
     }
-    if (c === 63 || (c === 33 && xml.charCodeAt(lt + 2) === 45 && xml.charCodeAt(lt + 3) === 45)) {
-      // Comment or PI: a few per document, so they are compiled in markup(), not here.
-      const node = markup(xml, lt, cr, maxNameLength, bom);
-      cr = markupCr;
-      textStart = markupEnd;
-      if (node !== null) {
-        scratch[top++] = node;
-        lastText = false;
-      }
-      lt = xml.indexOf("<", textStart);
-      continue;
-    }
-    if (c === 33) {
-      if (xml.startsWith("[CDATA[", lt + 2)) {
+    if (c === 33 || c === 63) {
+      if (c === 33 && xml.startsWith("[CDATA[", lt + 2)) {
         if (open.length === 0) fail("CDATA section outside the root element", xml, lt);
         const end = xml.indexOf("]]>", lt + 9);
         if (end === -1) fail("unterminated CDATA section", xml, lt);
@@ -317,13 +317,16 @@ export function parseString(
           lastText = true;
         }
         textStart = end + 3;
-      } else if (xml.startsWith("DOCTYPE", lt + 2)) {
-        if (root !== null || seenDoctype) fail("DOCTYPE after the root or repeated", xml, lt);
-        seenDoctype = true;
-        DOCTYPE_HEAD_RE.lastIndex = lt + 9;
-        if (!DOCTYPE_HEAD_RE.test(xml)) fail("malformed DOCTYPE", xml, lt);
-        textStart = skipDoctype(xml, lt + 9);
-      } else fail("unknown markup declaration", xml, lt);
+      } else {
+        // Comment, PI or DOCTYPE: a few per document, so they are compiled in markup(), not here.
+        const node = markup(xml, lt, cr, maxNameLength, bom, root === null && !seenDoctype);
+        cr = markupCr;
+        textStart = markupEnd;
+        if (node !== null) {
+          scratch[top++] = node;
+          lastText = false;
+        } else if (c === 33) seenDoctype = true;
+      }
       lt = xml.indexOf("<", textStart);
       continue;
     }
