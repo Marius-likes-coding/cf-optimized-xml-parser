@@ -117,6 +117,98 @@ function skipDoctype(xml: string, start: number): number {
   );
 }
 
+/** A character above U+00FF. V8 stores a string without one with one byte per character. */
+const WIDE_RE = /[^\0-\u00FF]/;
+const ENCODER = new TextEncoder();
+/**
+ * parse() takes parseString() for inputs shorter than this. Short documents run their first 100
+ * parses in Sparkplug and Maglev, where typed-array loads gain little, and don't reach Turbofan,
+ * whose compile the bytes shrink, so the copy costs more than it saves. Measured on RSS cut to
+ * 8, 16, 32 and 64 KB, total of the first 100 parses: +10.7%, -15.4%, -14.4%, -11.7%.
+ */
+export const MIN_ASCII_LENGTH = 16_384;
+/** Byte buffers up to this length stay for the next parse; larger ones are dropped. */
+const KEEP_BYTES = 1 << 20;
+let asciiBuffer = new Uint8Array(0);
+/** asciiBuffer split into the chunks asciiBytes() copies, made once per buffer. */
+let asciiChunks: Uint8Array[] = [];
+
+/** Views of `bytes` in chunks that double from 1 KiB to 16 KiB. */
+function chunked(bytes: Uint8Array): Uint8Array[] {
+  const chunks: Uint8Array[] = [];
+  let start = 0;
+  let size = 1024;
+  while (start < bytes.length) {
+    const end = Math.min(start + size, bytes.length);
+    chunks.push(bytes.subarray(start, end));
+    start = end;
+    if (size < 16_384) size *= 2;
+  }
+  return chunks;
+}
+
+/**
+ * The input's bytes when every character is ASCII (byte i is then character i), else null.
+ * encodeInto() copies ASCII at memory speed, but converts the rest one character at a time from
+ * the first non-ASCII character on: ~0.8 ns per character on a one-byte string, ~2 ns on any
+ * two-byte string (workerd 1.20260815). So the regex goes first (it returns at once on a one-byte
+ * string), and the copy runs in chunks: a document with non-ASCII text stops within one chunk
+ * of its first such character. The chunks are views made with the buffer, because a new view
+ * per call costs more than the call.
+ */
+export function asciiBytes(xml: string): Uint8Array | null {
+  if (WIDE_RE.test(xml)) return null;
+  const length = xml.length;
+  let bytes = asciiBuffer;
+  let chunks = asciiChunks;
+  if (bytes.length < length) {
+    bytes = new Uint8Array(length);
+    chunks = chunked(bytes);
+    if (length <= KEEP_BYTES) {
+      asciiBuffer = bytes;
+      asciiChunks = chunks;
+    }
+  }
+  let start = 0;
+  for (let index = 0; start < length; index++) {
+    const chunk = chunks[index] as Uint8Array;
+    const size = Math.min(chunk.length, length - start);
+    // A non-ASCII character takes two bytes or more, so it either doesn't fit or is written as
+    // more bytes than characters read.
+    const { read, written } = ENCODER.encodeInto(xml.slice(start), chunk);
+    if (read !== size || written !== size) return null;
+    start += size;
+  }
+  // A read past the end must find no character, like charCodeAt()'s NaN, but a reused buffer
+  // holds an earlier input there. Zero compares like NaN (and shifts like it in the name-cache
+  // hash). parseString reads at most three positions past the end; only the name-cache checks
+  // read further, and their slice comparison decides there. Stores past a typed array's end
+  // are ignored, so this is safe when the buffer is exactly as long as the input.
+  bytes[length] = 0;
+  bytes[length + 1] = 0;
+  bytes[length + 2] = 0;
+  bytes[length + 3] = 0;
+  return bytes;
+}
+
+/**
+ * Parses `xml` with parseAscii() when it is ASCII and at least `minAscii` long, else with
+ * parseString(). parse() passes MIN_ASCII_LENGTH; warmup() passes 0, so its small documents
+ * reach both parsers.
+ */
+export function parseDocument(
+  xml: string,
+  maxDepth: number,
+  maxAttributes: number,
+  maxNameLength: number,
+  minAscii: number,
+): XmlDocument {
+  const bytes = xml.length < minAscii ? null : asciiBytes(xml);
+  return bytes === null
+    ? parseString(xml, maxDepth, maxAttributes, maxNameLength)
+    : parseAscii(xml, bytes, maxDepth, maxAttributes, maxNameLength);
+}
+
 /** Set by markup(): the position after the comment or PI, and the updated "\r" memo. */
 let markupEnd = 0;
 let markupCr = 0;
@@ -484,6 +576,293 @@ export function parseString(
   // V8 inlines the helper anyway, the optimized code deoptimizes on its first run and the next
   // parses pay a second top-tier compile (soap, s3: about 15 ms). In this function the same code
   // has feedback from the first parse on. markup() is too large to inline, so it stays a call.
+  scratch.length = 0;
+  attributeScratch.length = 0;
+  open.length = 0;
+  frames.length = 0;
+  seenNames.clear();
+  while (usedSlots.length > 0) recent[usedSlots.pop() as number] = NO_ELEMENT;
+  return { root, children };
+}
+
+/**
+ * parseString() for ASCII input: the same code, but it reads characters from `bytes` (byte i is
+ * character i, see asciiBytes()) instead of charCodeAt(). Strings still come from `xml`.
+ * To change it, copy parseString()'s body without comments and replace each xml.charCodeAt(i)
+ * with bytes[i] (`as number` in the name-cache hash); test/unit/ascii.test.ts checks that.
+ *
+ * Why: Turbofan lowers each charCodeAt() to a loop over V8's string representations (sliced,
+ * cons, thin, external) and unrolls it, so parseString's top-tier compile, about a fifth of the
+ * first 100 parses, is a quarter smaller with typed-array loads (research/optimization-log.md).
+ */
+export function parseAscii(
+  xml: string,
+  bytes: Uint8Array,
+  maxDepth: number,
+  maxAttributes: number,
+  maxNameLength: number,
+): XmlDocument {
+  const length = xml.length;
+  const open = openStack;
+  const frames = frameStack;
+  open.length = 0;
+  frames.length = 0;
+  let top = 0;
+  let root: XmlElement | null = null;
+  let lastText = false;
+  let seenDoctype = false;
+  let amp = xml.indexOf("&");
+  if (amp === -1) amp = length;
+  let cr = xml.indexOf("\r");
+  if (cr === -1) cr = length;
+  let cdataEnd = xml.indexOf("]]>");
+  if (cdataEnd === -1) cdataEnd = length;
+  let tabOrBreak = -1;
+  let tab = -1;
+  let lineFeed = -1;
+  let lt = xml.indexOf("<");
+  if (lt === -1) fail("no root element", xml, 0);
+  const bom = bytes[0] === 0xfe_ff ? 1 : 0;
+  let textStart = bom;
+
+  for (;;) {
+    const textEnd = lt === -1 ? length : lt;
+    if (textEnd > textStart) {
+      let p = textStart;
+      let c = bytes[p];
+      while (c === 32 || c === 10 || c === 9 || c === 13) {
+        if (++p === textEnd) break;
+        c = bytes[p];
+      }
+      if (p < textEnd) {
+        if (open.length === 0) fail("text outside the root element", xml, p);
+        if (cdataEnd < textStart) {
+          cdataEnd = xml.indexOf("]]>", textStart);
+          if (cdataEnd === -1) cdataEnd = length;
+        }
+        if (cdataEnd < textEnd) fail('"]]>" in text', xml, cdataEnd);
+        if (amp < textStart) {
+          amp = xml.indexOf("&", textStart);
+          if (amp === -1) amp = length;
+        }
+        if (cr < textStart) {
+          cr = xml.indexOf("\r", textStart);
+          if (cr === -1) cr = length;
+        }
+        const mode = cr < textEnd ? LINE_ENDS : RAW;
+        let value: string;
+        if (amp < textEnd) {
+          value = decodeEntities(xml, textStart, textEnd, amp, mode);
+          amp = ampAfter;
+        } else value = normalize(xml.slice(textStart, textEnd), mode);
+        if (lastText) scratch[top - 1] = (scratch[top - 1] as string) + value;
+        else {
+          scratch[top++] = value;
+          lastText = true;
+        }
+      }
+    }
+    if (lt === -1) break;
+
+    const c = bytes[lt + 1] as number;
+    if (c === 47) {
+      const node = open.pop();
+      if (node === undefined) return fail("end tag without a start tag", xml, lt);
+      const name = node.name;
+      if (xml.slice(lt + 2, lt + 2 + name.length) !== name)
+        fail("end tag doesn't match the open element", xml, lt);
+      let p = lt + 2 + name.length;
+      let ch = bytes[p];
+      while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = bytes[++p];
+      if (ch !== 62) fail("end tag doesn't match the open element", xml, lt);
+      const start = frames.pop() as number;
+      if (top > start) {
+        const only = scratch[start];
+        node.children =
+          top - start === 1 && typeof only === "string" ? only : scratch.slice(start, top);
+        top = start;
+      }
+      lastText = false;
+      textStart = p + 1;
+      lt = xml.indexOf("<", textStart);
+      continue;
+    }
+    if (c === 63 || (c === 33 && bytes[lt + 2] === 45 && bytes[lt + 3] === 45)) {
+      const node = markup(xml, lt, cr, maxNameLength, bom);
+      cr = markupCr;
+      textStart = markupEnd;
+      if (node !== null) {
+        scratch[top++] = node;
+        lastText = false;
+      }
+      lt = xml.indexOf("<", textStart);
+      continue;
+    }
+    if (c === 33) {
+      if (xml.startsWith("[CDATA[", lt + 2)) {
+        if (open.length === 0) fail("CDATA section outside the root element", xml, lt);
+        const end = xml.indexOf("]]>", lt + 9);
+        if (end === -1) fail("unterminated CDATA section", xml, lt);
+        if (cr < lt) {
+          cr = xml.indexOf("\r", lt);
+          if (cr === -1) cr = length;
+        }
+        const value = normalize(xml.slice(lt + 9, end), cr < end ? LINE_ENDS : RAW);
+        if (lastText) scratch[top - 1] = (scratch[top - 1] as string) + value;
+        else {
+          scratch[top++] = value;
+          lastText = true;
+        }
+        textStart = end + 3;
+      } else if (xml.startsWith("DOCTYPE", lt + 2)) {
+        if (root !== null || seenDoctype) fail("DOCTYPE after the root or repeated", xml, lt);
+        seenDoctype = true;
+        DOCTYPE_HEAD_RE.lastIndex = lt + 9;
+        if (!DOCTYPE_HEAD_RE.test(xml)) fail("malformed DOCTYPE", xml, lt);
+        textStart = skipDoctype(xml, lt + 9);
+      } else fail("unknown markup declaration", xml, lt);
+      lt = xml.indexOf("<", textStart);
+      continue;
+    }
+
+    const slot =
+      ((c << 6) ^
+        ((bytes[lt + 2] as number) << 4) ^
+        ((bytes[lt + 3] as number) << 2) ^
+        (bytes[lt + 4] as number)) &
+      255;
+    const similar = recent[slot] as XmlElement;
+    let name = similar.name;
+    let p = lt + 1 + name.length;
+    let ch = bytes[p];
+    let predicted: string[] | null = similar.attrs;
+    let missed = false;
+    if (
+      (ch !== 62 && ch !== 32 && ch !== 47 && ch !== 10 && ch !== 9 && ch !== 13) ||
+      xml.slice(lt + 1, p) !== name
+    ) {
+      NAME_RE.lastIndex = lt + 1;
+      if (!NAME_RE.test(xml)) fail("invalid or missing element name", xml, lt);
+      p = NAME_RE.lastIndex;
+      if (p - lt - 1 > maxNameLength) fail("name longer than maxNameLength", xml, lt);
+      ch = bytes[p];
+      if (ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13 && ch !== 62 && ch !== 47)
+        fail("invalid character in element name", xml, p);
+      name = xml.slice(lt + 1, p);
+      predicted = null;
+      missed = true;
+      if (similar === NO_ELEMENT) usedSlots.push(slot);
+    }
+    let aTop = 0;
+    let onPrediction = true;
+    let seenReady = false;
+    for (;;) {
+      while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = bytes[++p];
+      if (ch === 62 || ch === 47) break;
+      const nameStart = p;
+      let attributeName =
+        predicted !== null && aTop < predicted.length ? (predicted[aTop] as string) : "/";
+      p = nameStart + attributeName.length;
+      ch = bytes[p];
+      if (
+        (ch !== 61 && ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13) ||
+        xml.slice(nameStart, p) !== attributeName
+      ) {
+        NAME_RE.lastIndex = nameStart;
+        if (!NAME_RE.test(xml)) fail("invalid or missing attribute name", xml, nameStart);
+        p = NAME_RE.lastIndex;
+        if (p - nameStart > maxNameLength) fail("name longer than maxNameLength", xml, nameStart);
+        ch = bytes[p];
+        attributeName = xml.slice(nameStart, p);
+        missed = true;
+        onPrediction = false;
+      }
+      if (!onPrediction) {
+        if (aTop < 32) {
+          for (let k = 0; k < aTop; k += 2) {
+            if (attributeScratch[k] === attributeName) fail("duplicate attribute", xml, nameStart);
+          }
+        } else {
+          if (!seenReady) {
+            seenNames.clear();
+            for (let k = 0; k < aTop; k += 2) seenNames.add(attributeScratch[k] as string);
+            seenReady = true;
+          }
+          if (seenNames.has(attributeName)) fail("duplicate attribute", xml, nameStart);
+          seenNames.add(attributeName);
+        }
+        if (aTop === maxAttributes * 2) fail("more attributes than maxAttributes", xml, lt);
+      }
+      while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = bytes[++p];
+      if (ch !== 61) fail('missing "=" after attribute name', xml, p);
+      ch = bytes[++p];
+      while (ch === 32 || ch === 10 || ch === 9 || ch === 13) ch = bytes[++p];
+      if (ch !== 34 && ch !== 39) fail("attribute value not quoted", xml, p);
+      const valueStart = p + 1;
+      const valueEnd = xml.indexOf(ch === 34 ? '"' : "'", valueStart);
+      if (valueEnd === -1) fail("unterminated attribute value", xml, p);
+      if (tabOrBreak < valueStart) {
+        if (lineFeed < valueStart) {
+          lineFeed = xml.indexOf("\n", valueStart);
+          if (lineFeed === -1) lineFeed = length;
+        }
+        if (tab < valueStart) {
+          tab = xml.indexOf("\t", valueStart);
+          if (tab === -1) tab = length;
+        }
+        if (cr < valueStart) {
+          cr = xml.indexOf("\r", valueStart);
+          if (cr === -1) cr = length;
+        }
+        tabOrBreak = Math.min(lineFeed, tab, cr);
+      }
+      if (amp < valueStart) {
+        amp = xml.indexOf("&", valueStart);
+        if (amp === -1) amp = length;
+      }
+      const mode = tabOrBreak < valueEnd ? ATTRIBUTE : RAW;
+      let value: string;
+      if (amp < valueEnd) {
+        value = decodeEntities(xml, valueStart, valueEnd, amp, mode);
+        amp = ampAfter;
+      } else value = normalize(xml.slice(valueStart, valueEnd), mode);
+      attributeScratch[aTop++] = attributeName;
+      attributeScratch[aTop++] = value;
+      p = valueEnd + 1;
+      ch = bytes[p];
+      if (ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13 && ch !== 62 && ch !== 47)
+        fail("missing whitespace between attributes", xml, p);
+    }
+    let selfClosing = false;
+    if (ch === 47) {
+      if (bytes[++p] !== 62) fail('expected ">" after "/"', xml, p);
+      selfClosing = true;
+    }
+    const node: XmlElement = {
+      name,
+      attrs: aTop > 0 ? attributeScratch.slice(0, aTop) : null,
+      children: null,
+    };
+    if (open.length === 0) {
+      if (root !== null) fail("more than one root element", xml, lt);
+      root = node;
+    }
+    if (missed) recent[slot] = node;
+    scratch[top++] = node;
+    lastText = false;
+    if (!selfClosing) {
+      if (open.length === maxDepth) fail("nesting deeper than maxDepth", xml, lt);
+      open.push(node);
+      frames.push(top);
+    }
+    textStart = p + 1;
+    lt = xml.indexOf("<", lt + 1);
+    if (lt !== -1 && lt < textStart) fail('"<" inside a tag', xml, lt);
+  }
+
+  if (open.length > 0) fail("unclosed element at end of input", xml, length);
+  if (root === null) return fail("no root element", xml, length);
+  const children = scratch.slice(0, top);
   scratch.length = 0;
   attributeScratch.length = 0;
   open.length = 0;

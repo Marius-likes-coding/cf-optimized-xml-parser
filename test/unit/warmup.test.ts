@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parse, warmup } from "../../src/index.js";
-import { WARMUP_ONE_BYTE, WARMUP_TWO_BYTE } from "../../src/warmup.js";
+import { WARMUP_ASCII, WARMUP_ONE_BYTE, WARMUP_TWO_BYTE } from "../../src/warmup.js";
 
 describe("warmup", () => {
   it("runs once and leaves the parser working", () => {
@@ -15,6 +15,7 @@ describe("warmup", () => {
   // documents from losing coverage when someone edits them (see research/spikes/s5-jit-behavior.md).
   it("uses documents that exercise every parser path", () => {
     for (const [xml, text] of [
+      [WARMUP_ASCII, "cafe"],
       [WARMUP_ONE_BYTE, "café"],
       [WARMUP_TWO_BYTE, "“quoted” €"],
     ] as const) {

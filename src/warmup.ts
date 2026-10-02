@@ -1,5 +1,5 @@
 import { decodeInput } from "./decode.js";
-import { parseString, resetParser } from "./parse-string.js";
+import { parseDocument, resetParser } from "./parse-string.js";
 
 /**
  * Warm-up documents: together they run every path of the parser once, so V8 has type feedback
@@ -8,8 +8,10 @@ import { parseString, resetParser } from "./parse-string.js";
  * no feedback, and optimized code deoptimizes when it first runs there. Without it, the first document of a new shape (say an
  * attribute-heavy SVG after RSS) hits a path with no feedback, deoptimizes the parser and pays
  * a second optimizing compile of 24–45 ms on the request thread (research/spikes/s5-jit-behavior.md,
- * confirmed on Cloudflare). One document is one-byte, the other two-byte (a character above
- * U+00FF), so both V8 string representations are seen.
+ * confirmed on Cloudflare). parse() reads long ASCII documents with parseAscii() and the others
+ * with parseString(); the warm-up sends its short ASCII document to parseAscii() too. Of the
+ * other two, one is one-byte with a non-ASCII character, one two-byte (a character above
+ * U+00FF), so both parsers and both V8 string representations are seen.
  *
  * "Every path" also means every refresh of a memoized search and every rarely taken loop: the
  * "\r\n" after the top comment makes the PI branch search for the next "\r" (a CRLF feed with a
@@ -42,6 +44,9 @@ const COMMON =
 
 const DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
 
+/** Warm-up document with only ASCII characters. */
+export const WARMUP_ASCII = DECLARATION + COMMON.replaceAll("TEXT", "cafe");
+
 /** Warm-up document with only one-byte characters. */
 export const WARMUP_ONE_BYTE = DECLARATION + COMMON.replaceAll("TEXT", "café");
 
@@ -49,10 +54,17 @@ export const WARMUP_ONE_BYTE = DECLARATION + COMMON.replaceAll("TEXT", "café");
 export const WARMUP_TWO_BYTE = DECLARATION + COMMON.replaceAll("TEXT", "“quoted” €");
 
 /**
- * Enough parses for V8 to allocate the parser's feedback vector (after ~8 calls) and record
- * every path, few enough that it doesn't optimize on warm-up feedback alone (30 did, S5).
+ * Parses with parseString(): enough for V8 to allocate its feedback vector and record every path,
+ * few enough that it doesn't optimize on warm-up feedback alone (30 did, S5).
  */
 const PARSES = 10;
+
+/**
+ * Parses with parseAscii(), whose loop allocates its feedback vector during the first parse. Its
+ * bytecode is smaller, so 10 warm-up parses already compiled it in Maglev, and the first real
+ * document deoptimized that code (workerd 1.20260815); with 4, 6 or 8 neither happened.
+ */
+const ASCII_PARSES = 6;
 
 let warmed = false;
 
@@ -70,7 +82,8 @@ export function warmup(): void {
   warmed = true;
   try {
     for (let index = 0; index < PARSES; index++) {
-      parseString(index % 2 === 0 ? WARMUP_ONE_BYTE : WARMUP_TWO_BYTE, 256, 200, 1000);
+      if (index < ASCII_PARSES) parseDocument(WARMUP_ASCII, 256, 200, 1000, 0);
+      parseDocument(index % 2 === 0 ? WARMUP_ONE_BYTE : WARMUP_TWO_BYTE, 256, 200, 1000, 0);
     }
     decodeInput(new TextEncoder().encode(WARMUP_TWO_BYTE));
   } finally {
