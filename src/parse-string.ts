@@ -200,6 +200,17 @@ function markup(
  * longer, and don't reach Turbofan within 100 parses.
  */
 export const MIN_OUTLINE_LENGTH = 16_384;
+/**
+ * The length from which parseString() calls restOfTag(): MIN_OUTLINE_LENGTH, or 0 while warmup()
+ * runs it on its short documents. Read only on an unpredicted name, so it costs parseString()'s
+ * hot loop no parameter and no live value.
+ */
+let outlineFrom = MIN_OUTLINE_LENGTH;
+
+/** Lets warmup() and tests send short documents through restOfTag() too. */
+export function setOutlineFrom(length: number): void {
+  outlineFrom = length;
+}
 
 /** Set by restOfTag(): where the tag goes on, its attribute count and the updated memos. */
 let restP = 0;
@@ -312,11 +323,8 @@ export function parseString(
   maxDepth: number,
   maxAttributes: number,
   maxNameLength: number,
-  minOutline: number,
 ): XmlDocument {
   const length = xml.length;
-  // Long documents read unpredicted attributes in restOfTag() (see MIN_OUTLINE_LENGTH).
-  const outline = length >= minOutline;
   const open = openStack;
   const frames = frameStack;
   open.length = 0;
@@ -498,7 +506,8 @@ export function parseString(
         (ch !== 61 && ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13) ||
         xml.slice(nameStart, p) !== attributeName
       ) {
-        if (outline) {
+        // Long documents read unpredicted attributes in restOfTag() (see MIN_OUTLINE_LENGTH).
+        if (length >= outlineFrom) {
           restOfTag(
             xml,
             lt,

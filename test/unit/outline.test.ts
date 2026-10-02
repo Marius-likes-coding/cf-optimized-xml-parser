@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { parse, XmlError } from "../../src/index.js";
-import { MIN_OUTLINE_LENGTH, parseString, resetParser } from "../../src/parse-string.js";
+import {
+  MIN_OUTLINE_LENGTH,
+  parseString,
+  resetParser,
+  setOutlineFrom,
+} from "../../src/parse-string.js";
 
 /** The result, or the error's message and offset. Resets the parser after an error. */
 function outcome(run: () => unknown): unknown {
@@ -15,8 +20,12 @@ function outcome(run: () => unknown): unknown {
 
 /** Parses with the unpredicted attributes read in restOfTag() and inline; both must agree. */
 function expectSameBothWays(xml: string, limits: [number, number, number] = [256, 200, 1000]) {
-  const inline = outcome(() => parseString(xml, ...limits, Number.POSITIVE_INFINITY));
-  expect(outcome(() => parseString(xml, ...limits, 0))).toEqual(inline);
+  setOutlineFrom(Number.POSITIVE_INFINITY);
+  const inline = outcome(() => parseString(xml, ...limits));
+  setOutlineFrom(0);
+  const outlined = outcome(() => parseString(xml, ...limits));
+  setOutlineFrom(MIN_OUTLINE_LENGTH);
+  expect(outlined).toEqual(inline);
   return inline;
 }
 
@@ -59,6 +68,10 @@ describe("attributes the name cache didn't predict", () => {
   it("are read outside parseString in long documents", () => {
     const xml = `<r v="1">${'<c x="1" y="&lt;2"/>'.repeat(MIN_OUTLINE_LENGTH / 16)}<c x="1" z="3"/></r>`;
     expect(xml.length).toBeGreaterThan(MIN_OUTLINE_LENGTH);
-    expect(parse(xml)).toEqual(parseString(xml, 256, 200, 1000, Number.POSITIVE_INFINITY));
+    const outlined = parse(xml);
+    setOutlineFrom(Number.POSITIVE_INFINITY);
+    const inline = parseString(xml, 256, 200, 1000);
+    setOutlineFrom(MIN_OUTLINE_LENGTH);
+    expect(outlined).toEqual(inline);
   });
 });
