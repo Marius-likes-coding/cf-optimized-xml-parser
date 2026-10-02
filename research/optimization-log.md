@@ -1434,3 +1434,45 @@ What that means for the entries below:
   of the 95 bytes, but then a document whose first attributes went through `restOfTag()` searches
   for tabs to its end once more per parse (svg ~1%). Note for future loops: on CI, rss-small's
   cold row reacts to added bytecode in `parseString` that it never runs.
+
+### 2026-10-02: Outlined attribute misses without the flag (failed)
+
+- **Hypothesis:** Retry of the entry above. A diagnostic `perf.yml` run (37035528918, branch
+  `diag/dead-call-site`: main plus only #67's call site, never executed) put every row at ⚪,
+  rss-small +1.1% (−0.7…+2.9; Intel +2.8%, AMD +0.3%), warm −1.9…+0.5%. So the call site explains
+  at most a third of #67's rss-small +3.0%. The other change to the hot loop was the `outline`
+  flag: a fifth parameter and a boolean live across the whole loop, which costs Maglev
+  registers, and rss-small runs 90 of its 100 parses in Maglev. Without the flag, rss-small
+  should stay ⚪ and the s3/sitemap cold wins remain.
+- **Change:** #67's commit, rebased, with the threshold read from a module variable
+  (`outlineFrom`, 16 KiB) only in the miss branch: `parseString`'s signature, live values and
+  `index.ts` are main's. `setOutlineFrom()` lets `warmup()` and the tests reach both paths.
+- **Measured:** base `b0acff2` → candidate; workerd 1.20260815.1, `taskset -c 4,5`. Equivalence
+  as in the entry above (`SAME` on 44,858, 32,359 and 5,427 inputs). Quick round: cold s3-ascii
+  −6.9% 🟢, sitemap −5.0% 🟢, rss-small +4.4% (🟡 inconclusive, ±17); warm +0.3…+0.9% (⚪).
+  Pooled rss-small (160 isolates): −1.4%. Encodings: cold s3-cjk −6.3% 🟢, others −1.9…−0.6%;
+  warm +0.7…+1.1% (⚪). Lint, format, typecheck, 167 unit tests, fuzz, size (9.58 kB),
+  conformance 1263/1736 = main.
+- **CI:** PR #69, two runs.
+  Run 1, commit `fb2529d`: `src/index.ts` was left unstaged, so `parse()` still passed a fifth,
+  ignored argument and `lint-type-build` failed on typecheck. 13 AMD, 3 Intel runners. Cold
+  s3-ascii −5.5% 🟢, sitemap −4.1% 🟢, rss-ascii −2.3%, rss-small +2.2% (−0.7…+5.1), others
+  −1.5…−0.3% (⚪). Warm rss-ascii +2.6%, s3-ascii +2.6%, sitemap +2.6% 🟡 slower (AMD
+  +3.3…+3.6%, Intel −0.4…−1.5%), rss-poison +2.3%, rss-crlf +1.8%, others −1.7…+1.4% (⚪).
+  Run 2 (decides), commit `54fc87d` (the fix), 16 AMD runners. Cold s3-ascii −5.2% 🟢
+  (−5.7…−4.6), sitemap −3.7% 🟢, rss-ascii −3.0% 🟢, rss-small +1.4% (+0.1…+2.7), others
+  −1.4…−0.3% (⚪). **Warm s3-ascii +4.2%, sitemap +3.6%, rss-ascii +3.5%, rss-poison +3.5%,
+  ooxml +2.7%, rss-crlf +2.6% 🟡 slower**; rss-small +2.0%, entities +1.5%, svg −0.2%, soap
+  −0.1% (⚪). Closed per the merge rule.
+- **Why:** removing the flag fixed rss-small's cold row, as the diagnostic predicted (+3.0% →
+  +1.4%). The warm 🟡 rows are AMD-only and repeat across both runs of this build with nearly the
+  same sizes, while #67, which differs by a few lines in the miss branch, ran AMD warm s3 −1.5%,
+  sitemap −0.9%. So the AMD warm shifts behave like a fixed per-build property (most likely code
+  layout of the optimized hot loop), not run-to-run noise: re-running a build doesn't change them,
+  any code change re-draws them. In warm isolates both attribute paths have warm-up feedback, so
+  the optimized `parseString` contains the call site as well as the inline miss path.
+- **Retry if:** the warm gate's treatment of AMD-only shifts changes, or a packaging leaves the
+  warm-mode optimized code of `parseString` as on main. Notes for future loops: (1) check
+  `git status` before committing a multi-file change: a file left unstaged makes CI measure code
+  other than the one measured locally. (2) The AMD warm effect looks fixed per build: two runs of
+  one build agree, so a second run of a build is no test of it.
