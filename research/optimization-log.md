@@ -1269,3 +1269,57 @@ What that means for the entries below:
   (`deopt-eager: out of bounds`), even when that happens only once per parse; bound such loops
   by the length. (2) `StringIndexOf`'s share of a profile is mostly the attribute-value quote
   searches and the long scans, not the short "<" searches.
+
+### 2026-10-02: DOCTYPE handled in markup(), outside parseString's compile (failed)
+
+- **Hypothesis:** On documents with a DOCTYPE, Turbofan inlines `skipDoctype()` into
+  `parseString`'s top-tier compile (`--trace-turbo-inlining` on svg), together with the DOCTYPE
+  branch: its own `charCodeAt()` loop, a constant `startsWith()` and the `DOCTYPE_HEAD_RE` test.
+  All of it runs once per document. In `markup()`, which is too large to inline and stays in the
+  low tiers, it would leave that compile: svg a few ms faster, every other fixture neutral. A
+  different part of the parser than the last three entries (byte reads, stacks, the next-tag
+  search). CDATA stays inline: RSS has one per item.
+- **Change:** `src/parse-string.ts`: `markup()` also handles `<!DOCTYPE` and the
+  unknown-declaration error, with the same checks in the same order. `parseString` dispatches
+  `c === 33 || c === 63` to CDATA (inline) or `markup()`, passes `root === null && !seenDoctype`,
+  and marks the DOCTYPE as seen when `markup()` returns null for `<!`.
+  `test/unit/strict.test.ts`: the messages and offsets of the moved error paths (passes on main
+  too).
+- **Measured:** base `81ceb7c` → candidate; workerd 1.20260815.1, `taskset -c 4,5`. Turbofan
+  compile of `parseString` on svg (3 fresh isolates each): 23.6 / 23.6 / 28.6 → 20.9 / 23.0 /
+  24.8 ms; `skipDoctype` now gets its own Maglev compile (0.3 ms).
+  Quick rounds: cold svg −3.9% 🟢 (−4.5…−3.2, 6 × 20 isolates), rss-ascii −0.4%, s3-ascii +0.0%,
+  rss-small −1.3%, soap −1.5%, entities −0.0% (⚪); warm svg +1.4%, the others −1.1…+0.7% (⚪).
+  Encodings: cold rss-latin1 −1.6%, rss-cjk −0.9%, ooxml-cjk −0.6%, s3-cjk +0.1%; warm
+  −2.0…−0.1% (⚪). Equivalence `SAME` on 5,427 inputs and on 32,359 strict inputs (full
+  messages and offsets, three limit settings, mutations and truncations). Lint, format,
+  typecheck, 164 unit tests, fuzz, size (8.83 kB), conformance 1263/1736 = main.
+- **CI:** PR #62 (commit at `refs/pull/62/head`), 16 AMD runners. Cold `total-100`: svg −3.7% 🟢
+  (−4.1…−3.4); rss-ascii −2.0% (−3.3…−0.7, no warm support), ooxml −0.9%, rss-crlf −0.7%, s3
+  −0.7%, rss-poison −0.4%, sitemap −0.1%, entities +0.1%, rss-small +0.9%, soap +0.9% (⚪). Warm:
+  **rss-poison +4.3% (+1.8…+6.9), rss-crlf +3.5%, rss-small +2.8%, entities +2.7% (+0.5…+5.0)
+  🟡 slower**; sitemap +4.1%, rss-ascii +3.0%, s3 +2.7% ⚪; svg +0.0%, soap −0.2%, ooxml +0.4%.
+  Closed per the merge rule (🟡 slower rows).
+- **Why:** the cold mechanism worked as predicted and matched the laptop (svg −3.7% vs −3.9%).
+  The warm rows that went 🟡 are documents without a DOCTYPE, whose executed code didn't change;
+  on the Intel laptop they were neutral (rss-small +0.7%, soap −1.1%, entities −0.2%). But the
+  warm bench runs `warmup()`, whose documents have a DOCTYPE, so in warm isolates every fixture's
+  optimized `parseString` contained the DOCTYPE branch: on main with `skipDoctype()` inlined, here
+  as a call. That removes a few KB of machine code from the middle of the hot loop's code. The
+  most likely cause is a code-layout effect that the AMD runners (EPYC 7763) feel and the Intel
+  laptop doesn't: the `diag/ascii-unused` run below shows warm +1.2…+3.2% on the same kind of
+  rows with `parseString`'s source unchanged. Not proven: no AMD machine to profile on.
+- **Retry if:** the warm gate tolerates layout shifts of this size on AMD (its calibration ran
+  identical code, so it never saw one), or a packaging keeps the warm-mode code of
+  `parseString` unchanged. Note for future loops: on the AMD runners, a change that moves code
+  in or out of `parseString` can shift warm rows by ±3–4% on fixtures it doesn't touch; ideas
+  whose cold win is 2–4% from compile size alone are likely to meet a 🟡 warm row in CI.
+  Note for the ASCII byte copy (PR #58, its entry above): a `perf.yml` dispatch on the AMD runners
+  (run 37021806586, branch `diag/ascii-unused`: #58 with `MIN_ASCII_LENGTH` infinite, so
+  `parse()` never takes the byte path) measured cold all ⚪ (−0.4…+0.6%), but warm rss-poison
+  +2.7% 🟡 slower (+0.7…+4.6; AMD +3.2%, Intel −0.9%) and rss-ascii, rss-crlf, s3, sitemap,
+  entities +1.2…+1.7%, with `parseString`'s code unchanged. So about half of #58's rss-poison loss
+  (+6.5%) comes from the extra code being there at all (module size and layout, the
+  `parseDocument()` call, the longer warm-up), the rest from the two parsers sharing an isolate.
+  `gh workflow run perf.yml --ref <branch> -f base=<sha>` runs such diagnostics on CI's runners
+  without a pull request.
