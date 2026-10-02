@@ -191,6 +191,15 @@ function markup(
   };
 }
 
+let deadCh = 0;
+let deadTop = 0;
+/** DIAGNOSTIC ONLY: never called. */
+function deadCall(...args: unknown[]): number {
+  deadCh = args.length;
+  deadTop = args.length;
+  return 0;
+}
+
 export function parseString(
   xml: string,
   maxDepth: number,
@@ -379,6 +388,31 @@ export function parseString(
         (ch !== 61 && ch !== 32 && ch !== 10 && ch !== 9 && ch !== 13) ||
         xml.slice(nameStart, p) !== attributeName
       ) {
+        // DIAGNOSTIC ONLY: never true (limit() makes maxDepth at least 1).
+        if (maxDepth < 0) {
+          p = deadCall(
+            xml,
+            lt,
+            nameStart,
+            aTop,
+            maxAttributes,
+            maxNameLength,
+            amp,
+            cr,
+            lineFeed,
+            tab,
+            tabOrBreak,
+          );
+          ch = deadCh;
+          aTop = deadTop;
+          amp = deadTop;
+          cr = deadTop;
+          lineFeed = deadTop;
+          tab = deadTop;
+          tabOrBreak = deadTop;
+          missed = true;
+          break;
+        }
         NAME_RE.lastIndex = nameStart;
         if (!NAME_RE.test(xml)) fail("invalid or missing attribute name", xml, nameStart);
         p = NAME_RE.lastIndex;
