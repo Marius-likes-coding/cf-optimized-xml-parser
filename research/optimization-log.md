@@ -1062,3 +1062,50 @@ What that means for the entries below:
   win on ooxml or rss is added. Warm is consistently faster on rss, soap and ooxml in both runs,
   but cold sits at −2…−5%, where a local and a CI run disagree. The combined commit is
   `989065a` (closed PR #54).
+
+### 2026-10-02: End-tag check with indexOf instead of slice + === (failed)
+
+- **Hypothesis:** On main, a per-request trace of fresh isolates (thread CPU, `--trace-opt`,
+  `--trace-gc`; one isolate each, laptop) splits `total-100` like this:
+
+  | fixture   | total | Turbofan `parseString` | Maglev | `decodeEntities` | scavenges     |
+  | --------- | ----: | ---------------------: | -----: | ---------------: | ------------- |
+  | rss-ascii |    59 |                     19 |    3.0 |              2.8 | 2.9 ms (12)   |
+  | svg       |   105 |                  22–25 |    3.2 |                — | 7.2 ms (18)   |
+  | soap      |    75 |                     15 |    2.7 |                — | 7.0 ms (18)   |
+  | s3-ascii  |    61 |                  14–17 |    2.5 |              3.0 | 5.8 ms (17)   |
+  | entities  |    83 |                     14 |    2.7 |              6.8 | not traced    |
+
+  The young generation fills every ~6 parses (2.5 → 1.0 MB), so s3 allocates ~250 KB per parse
+  against a retained tree of ~130 KB. Most of the garbage is the strings that the name checks
+  slice only to compare (end tag, name-cache hit, predicted attribute names; ~40 bytes per
+  element on s3). In a warm tick profile (s3) `StringSubstring` is 11.9%, `StringEqual` 8.0%,
+  `StringIndexOf` 12.3%. Of the three checks, only the end tag can use `indexOf`: a mismatch
+  there fails the parse, so the scan to the end of the input happens once. (For the other two a
+  mismatch is a normal miss, and a forward scan per miss would be quadratic on crafted input.)
+  `xml.indexOf(name, lt + 2) !== lt + 2` is the same test without an allocation: fewer
+  scavenges and one builtin call less per end tag on end-tag-dense documents (s3, sitemap, soap).
+- **Change:** `src/parse-string.ts`, the end-tag check only, one round. `SAME` on 5,427 inputs.
+  Reverted; only this log ships.
+- **Measured:** base `d5fff69` → candidate +dirty; workerd 1.20260815.1. Scavenges per 100 cold
+  parses: s3 16 → 14, soap 18 → 17. Warm profile (s3): `StringSubstring` 11.9 → 7.2%,
+  `StringEqual` 8.0 → 5.1%, `StringIndexOf` 12.3 → 17.5%.
+  Quick (`s3-ascii,sitemap,soap`; 4 batches × 20 cold isolates, 4 warm, `taskset -c 4,5`): cold
+  s3 +1.3% (−5.3…+8.3), sitemap +0.0% (−2.8…+2.9), soap −0.8% (−3.2…+1.5); warm s3 +0.1%,
+  sitemap +1.2% (−1.1…+3.5), soap −0.3%. All ⚪. No encoding or bytes checks (failed).
+- **CI:** not opened (failed locally).
+- **Why:** for a pattern longer than one character, `StringIndexOf` calls out to C++ string
+  search, which costs about as much as the slice and the compare together. The allocation it
+  saves is ~1/8 of the young-generation traffic, worth 1–2 of 16–18 scavenges (~0.4 ms), too
+  little to show.
+- **Retry if:** V8 inlines `indexOf`/`startsWith` with a non-constant pattern, or all three name
+  checks can drop their slice at once (about half of the allocation per parse on s3). Notes for
+  future loops:
+  (1) Turbofan's compile of `parseString` is still 20–40% of `total-100`, and GC 5–10%.
+  (2) To capture V8 traces from local workerd, pass Miniflare `handleStructuredLogs` (its
+  default log drops the lines) and start workerd through `stdbuf -oL -eL` (set
+  `MINIFLARE_WORKERD_PATH` to a wrapper script). Without line buffering, the lines arrive in 4 KB
+  blocks or are lost when the process is killed, and are attributed to the wrong isolate.
+  (3) A warm `--prof --prof-sampling-interval=100` profile gets 10× more ticks than the
+  default. Ticks outside V8's code objects can be split by `/proc/<pid>/maps`: on rss, 12.8% land
+  in workerd's own C++ code (GC, string search) and 9.5% in libc (`memchr`, `memcpy`).
