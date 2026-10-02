@@ -1236,3 +1236,36 @@ What that means for the entries below:
   Maglev column), or combined with another early-tier saving. Note for future loops: the cheapest
   way to judge an early-tier idea is `bench:ab` per tier, then weigh each tier by its share of
   `total-100` (trace per request: Maglev and Turbofan compile parse numbers).
+
+### 2026-10-02: Next "<" found without indexOf() after end tags (failed)
+
+- **Hypothesis:** `StringIndexOf` is ~12% of s3's warm time (plus `memchr` in libc). Every end
+  tag, attribute-less start tag and comment/PI/CDATA starts an `indexOf("<")`, though in most
+  documents only whitespace, or nothing, comes before the next "<" (minified `</Key><Size>`,
+  pretty-printed `</title>\n    <link>`). Skipping whitespace with a few character reads and
+  taking the "<" directly would halve the "<" searches on s3 and save one per element in
+  pretty-printed documents, in every tier. A start tag without attributes can't hide a "<"
+  (only whitespace and "/" follow its name), so it needs no search from its own start either.
+- **Change:** `src/parse-string.ts` only. Those branches set `lt = -2`; the loop top skips
+  whitespace from `textStart` and either takes the "<" (dropping the whitespace, as the text path
+  would) or calls `indexOf("<")` from the first other character. Start tags with attributes keep
+  the search from their own start (the "<" inside an attribute value check). Equivalence `SAME` on
+  5,427 inputs and on 32,359 strict inputs (full messages and offsets, three limit settings,
+  mutations and truncations). Reverted; only this log ships.
+- **Measured:** base `844b55e` (src as on `81ceb7c`); workerd 1.20260815.1, `taskset -c 4,5`.
+  r1 (unbounded scan) quick (4 × 20 cold, 4 warm): cold s3-ascii +8.6%, rss-ascii +13.6%, soap
+  +7.8% (🔴); warm +5.2% / +4.1% / +2.8%. Trace: Maglev's `parseString` deoptimized ("out of
+  bounds") at parse 5 (s3) and 8 (rss): the scan read one past the end after the root's end tag,
+  once per parse. A second Maglev compile and a later Turbofan compile followed.
+  r2 (scan bounded by the length; no deopt in the trace): cold s3-ascii +1.0% (−5.1…+7.4),
+  rss-ascii +3.4% (🟡 inconclusive, −3.6…+11.0), soap +1.0%; warm s3 +0.7%, rss −3.6% (−7.9…+0.9),
+  soap +0.5% (⚪). Turbofan compile of `parseString` on rss 23.7 → 27.8 ms (one isolate each).
+- **CI:** not opened (failed locally).
+- **Why:** a search whose target is at offset 0 or a few characters on is cheap: the builtin call
+  returns at once, and the character reads plus compares that replace it cost about as much in
+  Turbofan. The added loop also costs compile time. s3's expected −5% warm didn't show (+0.7%).
+- **Retry if:** never in this form. Notes for future loops: (1) a `charCodeAt()` loop that can
+  run past the end of the input deoptimizes Maglev's code on its first out-of-bounds read
+  (`deopt-eager: out of bounds`), even when that happens only once per parse; bound such loops
+  by the length. (2) `StringIndexOf`'s share of a profile is mostly the attribute-value quote
+  searches and the long scans, not the short "<" searches.
