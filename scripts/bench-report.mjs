@@ -52,7 +52,7 @@ const body = [
           : undefined,
   ),
   "",
-  `<sub>Gate: local ≥ 5% (cold, warm) when the change is significant; override with the label \`perf-regression-accepted\`. The Cloudflare comparison is report-only. ${process.env.RUN_URL ? `[Run](${process.env.RUN_URL})` : ""}</sub>`,
+  `<sub>Gate: local cold ≥ 3%, warm ≥ 5% when the change is significant; override with the label \`perf-regression-accepted\`. The Cloudflare comparison is report-only. ${process.env.RUN_URL ? `[Run](${process.env.RUN_URL})` : ""}</sub>`,
 ].join("\n");
 
 console.log(body);

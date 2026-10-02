@@ -34,7 +34,7 @@ env:
 jobs:
   # What this run measures. bench: false when the change touches nothing the benchmarks measure
   # (docs, research, tests), so such pull requests pass in seconds. remote: on pull requests only
-  # with the perf-remote label. shards: one runner per share of the fixtures.
+  # with the perf-remote label. shards: the runners; each measures every fixture.
   scope:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -85,7 +85,9 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      - run: npm run bench:pr
+      # Every shard measures every fixture (bench-merge.mjs combines the runners). taskset keeps
+      # workerd off vCPU 0, where the runner agent works; it narrowed A/A intervals slightly.
+      - run: taskset -c "1-$(($(nproc) - 1))" npm run bench:pr
         env:
           SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
       - uses: actions/upload-artifact@v5
