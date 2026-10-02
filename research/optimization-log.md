@@ -1323,3 +1323,24 @@ What that means for the entries below:
   `parseDocument()` call, the longer warm-up), the rest from the two parsers sharing an isolate.
   `gh workflow run perf.yml --ref <branch> -f base=<sha>` runs such diagnostics on CI's runners
   without a pull request.
+
+### 2026-10-02: Decoded values joined from an array instead of concatenated (failed)
+
+- **Hypothesis:** `decodeEntities` builds each value with `+=`. That creates cons-string trees
+  that stay in the output: entities retains 276 KB for a 125 KB input and has the most GC of the
+  fixtures (~7 ms of `total-100`), and `StringAdd` is 11.7% of its warm time (tick profile).
+  Pieces collected in a local array and joined once would give one flat string: fewer retained
+  objects for the scavenger to copy, one copy instead of 8–20 concatenations per value. A
+  different part and kind than the last three entries (stacks, the next-tag search, DOCTYPE),
+  and `parseString`'s code (and layout) unchanged.
+- **Change:** `src/entities.ts` only: every `out +=` became `pieces.push(...)` on a local array,
+  `return pieces.join("")`. `SAME` on 5,427 inputs. Reverted; only this log ships.
+- **Measured:** base `2471058` (src as on `81ceb7c`); workerd 1.20260815.1, `taskset -c 4,5`.
+  `bench:ab` per tier: Sparkplug entities +19%, sitemap +8%, s3 +7%, rss +5%; Maglev +66%, +25%,
+  +16%, +12%; Turbofan +80%, +20%, +26%, +11%. No quick round.
+- **CI:** not opened (failed locally).
+- **Why:** an array per value (allocation and growth from 0 to 17 to 41 slots) plus a
+  `join()` call costs far more than the concatenations it replaces. A cons string is a 20-byte
+  allocation, and `StringAdd` copies short results flat anyway.
+- **Retry if:** never with arrays. A flat result would need a cheaper builder; none exists in
+  JavaScript.
