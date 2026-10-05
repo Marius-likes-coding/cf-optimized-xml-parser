@@ -122,7 +122,7 @@ jobs:
       - uses: jdx/mise-action@v2
         if: needs.scope.outputs.bench == 'true'
       # A missing shard report fails the merge below, not this step.
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         if: needs.scope.outputs.bench == 'true'
         continue-on-error: true
         with:
@@ -191,7 +191,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: jdx/mise-action@v2
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           pattern: perf-*
@@ -220,7 +220,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: jdx/mise-action@v2
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           pattern: perf-*
