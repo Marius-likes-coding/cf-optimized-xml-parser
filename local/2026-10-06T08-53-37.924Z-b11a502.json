@@ -1,0 +1,791 @@
+{
+  "kind": "local",
+  "timestamp": "2026-10-06T08:52:56.852Z",
+  "base": {
+    "ref": "v2.0.6",
+    "sha": "4145032",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/.bench/base/src/index.ts"
+  },
+  "candidate": {
+    "ref": "working tree",
+    "sha": "b11a502",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/src/index.ts"
+  },
+  "shard": null,
+  "fixtures": [
+    "rss-ascii",
+    "rss-poison",
+    "rss-small",
+    "rss-crlf",
+    "svg",
+    "soap",
+    "s3-ascii",
+    "ooxml-ascii",
+    "sitemap",
+    "entities"
+  ],
+  "cpu": "AMD EPYC 7763 64-Core Processor | AMD EPYC 9V45 96-Core Processor | Intel(R) Xeon(R) 6973P-C | INTEL(R) XEON(R) PLATINUM 8573C | Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+  "affinity": "1-3",
+  "metricVersion": 2,
+  "timing": "thread-cpu",
+  "bundleHash": "d39ffbe808e5, 6096c35c036f",
+  "coldBundleHash": "0622ad5f1d79, ffa3a872c341",
+  "workerd": "1.20260815.1",
+  "flags": "--no-concurrent-recompilation --no-concurrent-sparkplug --no-maglev-build-code-on-background --no-maglev-deopt-data-on-background --no-lazy-compile-dispatcher --no-parallel-compile-tasks-for-eager-toplevel --no-parallel-compile-tasks-for-lazy",
+  "compatibilityDate": "2026-08-01",
+  "rows": [
+    {
+      "metric": "total-100",
+      "fixture": "rss-ascii",
+      "unit": "ms",
+      "base": 55.86286625260418,
+      "cand": 55.9434686796875,
+      "changePct": 0.11332429102997033,
+      "lowPct": -0.6811064594391181,
+      "highPct": 0.9141095244659114,
+      "halfWidthPct": 0.7967051315106333,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 640,
+      "batches": 32,
+      "shape": {
+        "length": 113798,
+        "twoByte": false
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 2.3593295281250004,
+          "early": 1.3277954453124998,
+          "later": 0.46384572175347205
+        },
+        "cand": {
+          "first": 2.3508556546875,
+          "early": 1.3309405098958331,
+          "later": 0.46514693869791657
+        }
+      },
+      "detail": "AMD -0.0% (12) · Intel +0.5% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-poison",
+      "unit": "ms",
+      "base": 59.619218515625,
+      "cand": 59.58714289583334,
+      "changePct": -0.09309730973285912,
+      "lowPct": -0.8946872714555965,
+      "highPct": 0.7149761234511498,
+      "halfWidthPct": 0.8055816723179954,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 640,
+      "batches": 32,
+      "shape": {
+        "length": 113798,
+        "twoByte": true
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 2.6949040671875006,
+          "early": 1.3664367565972222,
+          "later": 0.4994459903819443
+        },
+        "cand": {
+          "first": 2.6826148718750003,
+          "early": 1.3667537953125002,
+          "later": 0.5004406487326389
+        }
+      },
+      "detail": "AMD -0.2% (12) · Intel +0.1% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-small",
+      "unit": "ms",
+      "base": 8.872380296440971,
+      "cand": 8.853114668836808,
+      "changePct": -0.2679928118081709,
+      "lowPct": -1.8138660335312307,
+      "highPct": 1.3022191217176848,
+      "halfWidthPct": 1.5622292396907989,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 3840,
+      "batches": 96,
+      "shape": {
+        "length": 3478,
+        "twoByte": false
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 1.2693487473958331,
+          "early": 0.43849184357638893,
+          "later": 0.04402403277199074
+        },
+        "cand": {
+          "first": 1.2597290322916666,
+          "early": 0.4355742661747686,
+          "later": 0.04425670667534726
+        }
+      },
+      "detail": "AMD -0.5% (12) · Intel +0.6% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "total-100",
+      "fixture": "rss-crlf",
+      "unit": "ms",
+      "base": 57.74835452083334,
+      "cand": 57.78718431770833,
+      "changePct": -0.05204478687719227,
+      "lowPct": -1.235527614384735,
+      "highPct": 1.1456195734140806,
+      "halfWidthPct": 1.1911935480427849,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 640,
+      "batches": 32,
+      "shape": {
+        "length": 115158,
+        "twoByte": false
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 2.4037220375,
+          "early": 1.3853704149305555,
+          "later": 0.47909871086805556
+        },
+        "cand": {
+          "first": 2.4027676546875005,
+          "early": 1.3862330524305553,
+          "later": 0.4792544569444446
+        }
+      },
+      "detail": "AMD -0.4% (12) · Intel +1.1% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "total-100",
+      "fixture": "svg",
+      "unit": "ms",
+      "base": 84.80444423697918,
+      "cand": 84.98219090885416,
+      "changePct": 0.25018757738175523,
+      "lowPct": -0.32353292709962345,
+      "highPct": 0.8272103178565304,
+      "halfWidthPct": 0.5739357066379069,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 640,
+      "batches": 32,
+      "shape": {
+        "length": 135212,
+        "twoByte": false
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 4.4070893812500005,
+          "early": 4.0190100359375,
+          "later": 0.49700379637152775
+        },
+        "cand": {
+          "first": 4.389617053125,
+          "early": 4.016448201388889,
+          "later": 0.49777359890625006
+        }
+      },
+      "detail": "AMD +0.1% (12) · Intel +0.7% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "total-100",
+      "fixture": "soap",
+      "unit": "ms",
+      "base": 64.59652969010416,
+      "cand": 64.41227433593748,
+      "changePct": -0.28686871992786855,
+      "lowPct": -1.015707519901654,
+      "highPct": 0.4473366486502428,
+      "halfWidthPct": 0.7336266295973282,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 640,
+      "batches": 32,
+      "shape": {
+        "length": 107370,
+        "twoByte": false
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 3.6733884109374997,
+          "early": 3.048823803993056,
+          "later": 0.37521693260416666
+        },
+        "cand": {
+          "first": 3.689299532812499,
+          "early": 3.0499060215277773,
+          "later": 0.3735675445659723
+        }
+      },
+      "detail": "AMD -0.1% (12) · Intel -0.9% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "total-100",
+      "fixture": "s3-ascii",
+      "unit": "ms",
+      "base": 57.10070507031249,
+      "cand": 57.147043940104155,
+      "changePct": 0.11469759065361185,
+      "lowPct": -0.5350534584909528,
+      "highPct": 0.7686931142642406,
+      "halfWidthPct": 0.6511264600158495,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 640,
+      "batches": 32,
+      "shape": {
+        "length": 101228,
+        "twoByte": false
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 3.523043956250001,
+          "early": 2.7012395019097224,
+          "later": 0.32782160883680544
+        },
+        "cand": {
+          "first": 3.5262767062500004,
+          "early": 2.708814535937499,
+          "later": 0.3284542093055556
+        }
+      },
+      "detail": "AMD +0.1% (12) · Intel +0.2% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "total-100",
+      "fixture": "ooxml-ascii",
+      "unit": "ms",
+      "base": 72.13527840625001,
+      "cand": 71.93982170052085,
+      "changePct": -0.301370553720437,
+      "lowPct": -1.1213091021321842,
+      "highPct": 0.5253672273375587,
+      "halfWidthPct": 0.825826964029136,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 640,
+      "batches": 32,
+      "shape": {
+        "length": 86940,
+        "twoByte": false
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 3.9290041812499994,
+          "early": 3.1577933276041676,
+          "later": 0.4456928154340278
+        },
+        "cand": {
+          "first": 3.9024675890625002,
+          "early": 3.153500749305556,
+          "later": 0.4446479764062501
+        }
+      },
+      "detail": "AMD -0.2% (12) · Intel -0.7% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "total-100",
+      "fixture": "sitemap",
+      "unit": "ms",
+      "base": 66.65960036458333,
+      "cand": 66.56214891666667,
+      "changePct": -0.1465378426038222,
+      "lowPct": -0.7382271851063549,
+      "highPct": 0.4486784999522486,
+      "halfWidthPct": 0.5943237517331723,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 640,
+      "batches": 32,
+      "shape": {
+        "length": 106090,
+        "twoByte": false
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 4.24113425625,
+          "early": 2.9751503843749996,
+          "later": 0.39772017729166675
+        },
+        "cand": {
+          "first": 4.244294967187499,
+          "early": 2.985874891319444,
+          "later": 0.3955148275173613
+        }
+      },
+      "detail": "AMD -0.2% (12) · Intel -0.1% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "total-100",
+      "fixture": "entities",
+      "unit": "ms",
+      "base": 70.02923309114585,
+      "cand": 70.030195875,
+      "changePct": -0.029868891965656452,
+      "lowPct": -0.5791800937071989,
+      "highPct": 0.5224773158907459,
+      "halfWidthPct": 0.5509932803866358,
+      "thresholdPct": 3,
+      "improvementPct": 2,
+      "gated": true,
+      "status": "same",
+      "isolates": 640,
+      "batches": 32,
+      "shape": {
+        "length": 124824,
+        "twoByte": false
+      },
+      "timing": "thread-cpu",
+      "breakdown": {
+        "base": {
+          "first": 3.136743703125,
+          "early": 1.995644198263889,
+          "later": 0.548446286267361
+        },
+        "cand": {
+          "first": 3.1441162453125,
+          "early": 1.9899076602430557,
+          "later": 0.5493762542534723
+        }
+      },
+      "detail": "AMD +0.2% (12) · Intel -0.7% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-ascii",
+      "unit": "µs",
+      "base": 164.8621008240467,
+      "cand": 159.85869314143338,
+      "changePct": -2.4914891895679303,
+      "lowPct": -7.314912116184824,
+      "highPct": 2.582949399440926,
+      "halfWidthPct": 5.0753833862094035,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD -0.5% (12) · Intel -7.7% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-poison",
+      "unit": "µs",
+      "base": 186.48719263115507,
+      "cand": 185.13616127408702,
+      "changePct": -0.412136684761788,
+      "lowPct": -2.891309172315859,
+      "highPct": 2.130328760102884,
+      "halfWidthPct": 2.5212097966813007,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD +0.0% (12) · Intel -1.5% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-small",
+      "unit": "µs",
+      "base": 6.230234050300186,
+      "cand": 6.111286490567765,
+      "changePct": -1.7808220555937115,
+      "lowPct": -5.62616355618113,
+      "highPct": 2.22120112514288,
+      "halfWidthPct": 3.9948230302669363,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD -0.2% (12) · Intel -5.9% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "rss-crlf",
+      "unit": "µs",
+      "base": 169.22334547809646,
+      "cand": 164.3679443073374,
+      "changePct": -2.3497527381197703,
+      "lowPct": -6.9669793312511885,
+      "highPct": 2.4966267005182674,
+      "halfWidthPct": 4.845664141735234,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD -0.5% (12) · Intel -7.0% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "svg",
+      "unit": "µs",
+      "base": 399.18899724787155,
+      "cand": 406.17905470793545,
+      "changePct": 1.435167963457995,
+      "lowPct": -1.164736450152537,
+      "highPct": 4.1034639886971425,
+      "halfWidthPct": 2.596831328138366,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD +1.9% (12) · Intel +0.3% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "soap",
+      "unit": "µs",
+      "base": 292.1333756401356,
+      "cand": 290.88999999127446,
+      "changePct": -0.6585320425717689,
+      "lowPct": -6.338816062033647,
+      "highPct": 5.366245022836713,
+      "halfWidthPct": 5.891326817259463,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD +1.2% (12) · Intel -5.0% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "s3-ascii",
+      "unit": "µs",
+      "base": 222.7432139884011,
+      "cand": 219.6994236367796,
+      "changePct": -1.5877836754263241,
+      "lowPct": -7.384995141582684,
+      "highPct": 4.572302692423458,
+      "halfWidthPct": 6.0751084979987375,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD +0.2% (12) · Intel -5.9% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "ooxml-ascii",
+      "unit": "µs",
+      "base": 336.26937845895867,
+      "cand": 330.3653017184677,
+      "changePct": -2.035226414945246,
+      "lowPct": -7.529316138365683,
+      "highPct": 3.785291324668516,
+      "halfWidthPct": 5.774834692600328,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD -0.2% (12) · Intel -6.6% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "sitemap",
+      "unit": "µs",
+      "base": 282.2333713230777,
+      "cand": 279.1330724383285,
+      "changePct": -1.161090969451417,
+      "lowPct": -6.992023137258085,
+      "highPct": 5.035398767634902,
+      "halfWidthPct": 6.084355858873158,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD +0.9% (12) · Intel -6.2% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "warm",
+      "fixture": "entities",
+      "unit": "µs",
+      "base": 301.9847874784241,
+      "cand": 302.8788484800728,
+      "changePct": -0.015015300072840354,
+      "lowPct": -1.9803892845255855,
+      "highPct": 1.9897660526664085,
+      "halfWidthPct": 1.9853757787267445,
+      "thresholdPct": 5,
+      "improvementPct": 3,
+      "gated": true,
+      "status": "same",
+      "isolates": 16,
+      "timing": "thread-cpu",
+      "detail": "AMD +0.6% (12) · Intel -1.7% (4)",
+      "detailLabel": "by CPU vendor (runners)"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-ascii",
+      "unit": "KB",
+      "base": 76.109375,
+      "cand": 73.75390625,
+      "changePct": -3.0948470539930217,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-poison",
+      "unit": "KB",
+      "base": 73.72265625,
+      "cand": 73.72265625,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-small",
+      "unit": "KB",
+      "base": 2.74609375,
+      "cand": 2.74609375,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "rss-crlf",
+      "unit": "KB",
+      "base": 73.60546875,
+      "cand": 73.51171875,
+      "changePct": -0.12736825346282288,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "svg",
+      "unit": "KB",
+      "base": 218.99609375,
+      "cand": 218.99609375,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "soap",
+      "unit": "KB",
+      "base": 191.51953125,
+      "cand": 191.51953125,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "s3-ascii",
+      "unit": "KB",
+      "base": 130.25,
+      "cand": 130.25,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "ooxml-ascii",
+      "unit": "KB",
+      "base": 219.96875,
+      "cand": 219.96875,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "sitemap",
+      "unit": "KB",
+      "base": 190.02734375,
+      "cand": 190.12109375,
+      "changePct": 0.0493350052418462,
+      "gated": false,
+      "status": "info"
+    },
+    {
+      "metric": "memory",
+      "fixture": "entities",
+      "unit": "KB",
+      "base": 274.98828125,
+      "cand": 274.98828125,
+      "changePct": 0,
+      "gated": false,
+      "status": "info"
+    }
+  ],
+  "notes": [
+    "Measured on 16 runners in parallel (12 AMD, 4 Intel), every fixture on every runner, base and candidate paired on each: AMD EPYC 7763 64-Core Processor; AMD EPYC 9V45 96-Core Processor; Intel(R) Xeon(R) 6973P-C; INTEL(R) XEON(R) PLATINUM 8573C; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz."
+  ],
+  "accepted": false,
+  "regressions": 0,
+  "shards": [
+    {
+      "shard": "1/16",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "10/16",
+      "cpu": "AMD EPYC 9V45 96-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "11/16",
+      "cpu": "AMD EPYC 9V45 96-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "12/16",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "13/16",
+      "cpu": "Intel(R) Xeon(R) 6973P-C",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "14/16",
+      "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "15/16",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "16/16",
+      "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "2/16",
+      "cpu": "AMD EPYC 9V45 96-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "3/16",
+      "cpu": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "4/16",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "5/16",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "6/16",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "7/16",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "8/16",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    },
+    {
+      "shard": "9/16",
+      "cpu": "AMD EPYC 9V45 96-Core Processor",
+      "affinity": "1-3",
+      "bundleHash": "d39ffbe808e5, 6096c35c036f"
+    }
+  ]
+}
