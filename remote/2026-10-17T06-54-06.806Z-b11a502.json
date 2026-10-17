@@ -1,0 +1,225 @@
+{
+  "kind": "remote",
+  "timestamp": "2026-10-17T06:53:42.491Z",
+  "base": {
+    "ref": "v2.0.6",
+    "sha": "4145032",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/.bench/base/src/index.ts"
+  },
+  "candidate": {
+    "ref": "working tree",
+    "sha": "b11a502",
+    "path": "/home/runner/work/cf-optimized-xml-parser/cf-optimized-xml-parser/src/index.ts"
+  },
+  "bundleHash": "d39ffbe808e5, 6096c35c036f",
+  "worker": "cfxp-bench-39011151552-1-w0…w3",
+  "compatibilityDate": "2026-08-01",
+  "paceMs": 1050,
+  "rows": [
+    {
+      "metric": "remote-warm",
+      "fixture": "rss-ascii",
+      "unit": "µs",
+      "base": 378.858024691358,
+      "cand": 391.2037037037037,
+      "changePct": 2.9397235170602665,
+      "lowPct": -10.751840662346513,
+      "highPct": 20.554338322272226,
+      "thresholdPct": 10,
+      "gated": false,
+      "status": "same",
+      "detail": "-2 / +20 / -2 / -2",
+      "workers": [
+        {
+          "count": 12,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 12,
+          "rounds": 15,
+          "sent": 19
+        },
+        {
+          "count": 36,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 9,
+          "rounds": 15,
+          "sent": 15
+        }
+      ],
+      "shape": {
+        "length": 113798,
+        "twoByte": false
+      }
+    },
+    {
+      "metric": "remote-warm",
+      "fixture": "svg",
+      "unit": "µs",
+      "base": 1066.2615740740741,
+      "cand": 987.5578703703704,
+      "changePct": -5.481665390446544,
+      "lowPct": -22.721690787294925,
+      "highPct": 12.215013666147524,
+      "thresholdPct": 10,
+      "gated": false,
+      "status": "same",
+      "detail": "+4 / -22 / +6 / -8",
+      "workers": [
+        {
+          "count": 6,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 4,
+          "rounds": 15,
+          "sent": 16
+        },
+        {
+          "count": 12,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 4,
+          "rounds": 15,
+          "sent": 15
+        }
+      ],
+      "shape": {
+        "length": 135212,
+        "twoByte": false
+      }
+    },
+    {
+      "metric": "remote-warm",
+      "fixture": "soap",
+      "unit": "µs",
+      "base": 743.0555555555555,
+      "cand": 733.7962962962963,
+      "changePct": -0.4143405052583371,
+      "lowPct": -12.900537282434188,
+      "highPct": 16.88804546943985,
+      "thresholdPct": 10,
+      "gated": false,
+      "status": "same",
+      "detail": "-9 / -6 / +11 / +4",
+      "workers": [
+        {
+          "count": 12,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 4,
+          "rounds": 15,
+          "sent": 22
+        },
+        {
+          "count": 12,
+          "rounds": 15,
+          "sent": 20
+        },
+        {
+          "count": 6,
+          "rounds": 15,
+          "sent": 15
+        }
+      ],
+      "shape": {
+        "length": 107370,
+        "twoByte": false
+      }
+    },
+    {
+      "metric": "remote-warm",
+      "fixture": "s3-ascii",
+      "unit": "µs",
+      "base": 589.5763187429854,
+      "cand": 588.5241301907969,
+      "changePct": -0.5745138687224594,
+      "lowPct": -12.131176714571524,
+      "highPct": 13.759122766639065,
+      "thresholdPct": 10,
+      "gated": false,
+      "status": "same",
+      "detail": "-5 / -8 / +6 / +6",
+      "workers": [
+        {
+          "count": 12,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 11,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 18,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 6,
+          "rounds": 15,
+          "sent": 15
+        }
+      ],
+      "shape": {
+        "length": 101228,
+        "twoByte": false
+      }
+    },
+    {
+      "metric": "remote-warm",
+      "fixture": "ooxml-ascii",
+      "unit": "µs",
+      "base": 875,
+      "cand": 883.1018518518517,
+      "changePct": 2.856842732072362,
+      "lowPct": -7.7021480130692215,
+      "highPct": 54.88851531724856,
+      "thresholdPct": 10,
+      "gated": false,
+      "status": "same",
+      "detail": "+2 / -3 / +17 / -3",
+      "workers": [
+        {
+          "count": 8,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 4,
+          "rounds": 15,
+          "sent": 21
+        },
+        {
+          "count": 8,
+          "rounds": 15,
+          "sent": 15
+        },
+        {
+          "count": 6,
+          "rounds": 15,
+          "sent": 15
+        }
+      ],
+      "shape": {
+        "length": 86940,
+        "twoByte": false
+      }
+    }
+  ],
+  "notes": [
+    "Report only: on Cloudflare, identical parser copies in one isolate differ by up to ~35% depending on the isolate's history, so 4 fresh Workers (both copy orders) are combined; \"per Worker\" shows each Worker's change in %."
+  ],
+  "accepted": false,
+  "regressions": 0
+}
